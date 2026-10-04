@@ -1,14 +1,14 @@
 #!/bin/bash
 # Launch ircd for integration tests. Set IRCD_DEBUG=gdb|valgrind to wrap the
-# binary and write diagnostics under /opt/ircu/debug (bind-mounted by compose).
+# binary and write diagnostics under /opt/fishircd/debug (bind-mounted by compose).
 #
 # Runs as root so core_pattern and debug dir permissions can be configured,
-# then drops to the ircu user for the daemon (unless using live gdb).
+# then drops to the fishircd user for the daemon (unless using live gdb).
 set -euo pipefail
 
-IRCD="/opt/ircu/bin/ircd"
-CONF="/opt/ircu/lib/ircd.conf"
-DEBUG_DIR="/opt/ircu/debug"
+IRCD="/opt/fishircd/bin/ircd"
+CONF="/opt/fishircd/lib/ircd.conf"
+DEBUG_DIR="/opt/fishircd/debug"
 
 setup_debug_dir() {
   mkdir -p "$DEBUG_DIR"
@@ -24,8 +24,8 @@ setup_cores() {
 
 timestamp() { date -Iseconds 2>/dev/null || date; }
 
-run_as_ircu() {
-  su -s /bin/bash ircu -c "cd /opt/ircu && exec $(printf '%q ' "$@")"
+run_as_fishircd() {
+  su -s /bin/bash fishircd -c "cd /opt/fishircd && exec $(printf '%q ' "$@")"
 }
 
 run_normal() {
@@ -33,7 +33,7 @@ run_normal() {
   if [ "$#" -eq 0 ]; then
     set -- -f "$CONF" -n
   fi
-  run_as_ircu "$IRCD" "$@"
+  run_as_fishircd "$IRCD" "$@"
 }
 
 run_gdb() {
@@ -44,8 +44,8 @@ run_gdb() {
     echo "command: $IRCD -f $CONF -n"
     echo
   } | tee "$log"
-  # Live gdb under ircu; cores still land in DEBUG_DIR if gdb misses a fault.
-  su -s /bin/bash ircu -c "cd /opt/ircu && gdb -batch \
+  # Live gdb under fishircd; cores still land in DEBUG_DIR if gdb misses a fault.
+  su -s /bin/bash fishircd -c "cd /opt/fishircd && gdb -batch \
     -ex 'set pagination off' \
     -ex 'run -f $CONF -n' \
     -ex 'thread apply all bt full' \
@@ -64,7 +64,7 @@ run_valgrind() {
     echo
   } >"$DEBUG_DIR/valgrind-meta.log"
   ulimit -n 4096 2>/dev/null || ulimit -n 1024
-  run_as_ircu valgrind \
+  run_as_fishircd valgrind \
     --error-exitcode=99 \
     --leak-check=full \
     --track-origins=yes \

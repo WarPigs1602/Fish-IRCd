@@ -52,7 +52,7 @@ cat >version.c <<!SUB!THIS!
 
 const char *generation = "$generation";
 const char *creation = "$creation";
-const char *version = BASE_VERSION RELEASE PATCHLEVEL PATCHLIST;
+const char *version = BASE_VERSION RELEASE PATCHLEVEL " " FISH_IRC_VERSION PATCHLIST;
 
 const char *infotext[] = {
     "IRC --",
