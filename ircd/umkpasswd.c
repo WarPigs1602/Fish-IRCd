@@ -29,7 +29,7 @@
 #include <time.h>
 /* #include <assert.h> -- Now using assert in ircd_log.h */
 
-/* ircu headers */
+/* Fish-IRCd headers */
 #include "ircd_alloc.h"
 #include "ircd_log.h" /* for ircd's assert.h */
 #include "ircd_string.h"

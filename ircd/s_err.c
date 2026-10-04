@@ -718,7 +718,7 @@ static Numeric replyTable[] = {
 /* 342 */
   { 0 },
 /* 343 */
-  { 0 },
+  { RPL_WHOISOPERNAME, "%s %s :is opered as", "343" },
 /* 344 */
   { 0 },
 /* 345 */
@@ -830,7 +830,7 @@ static Numeric replyTable[] = {
 /* 398 */
   { 0 },
 /* 399 */
-  { 0 },
+  { RPL_USINGSLINE, ":Using S-line privilege", "399" },
 /* 400 */
   { 0 },
 /* 401 */
@@ -1092,9 +1092,9 @@ static Numeric replyTable[] = {
 /* 529 */
   { 0 },
 /* 530 */
-  { 0 },
+  { ERR_BADHOSTMASK, "%s :Invalid username/hostmask", "530" },
 /* 531 */
-  { 0 },
+  { ERR_HOSTUNAVAIL, "%s :sethost not found", "531" },
 /* 532 */
   { ERR_TLSCLIFINGERPRINT, ":TLS certificate fingerprint did not match", "532" },
 /* 533 */

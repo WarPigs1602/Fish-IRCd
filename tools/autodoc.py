@@ -1,5 +1,5 @@
 #
-# Structure AutoDocumentator for ircu.
+# Structure AutoDocumentator for Fish-IRCd.
 # 26/02/2000 --Gte
 #
 # Creates a 'structs.html', containing HTML Table definitions

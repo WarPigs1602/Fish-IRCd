@@ -34,7 +34,20 @@ YY CF 1711201234 sasl.mechanisms
 
 This deletes the key if the timestamp is newer than the previous value.
 
-**No static config changes are needed in ircd.conf; this is all dynamic and network-wide.**
+Set `sasl.server` to the services server name and `sasl.mechanisms` to its
+supported mechanisms. Alternatively, configure `SASL_SERVER` in the local
+feature block as a fallback for `sasl.server`:
+
+```
+feature {
+  "SASL_SERVER"="services.example.net";
+};
+```
+
+An existing network-wide `sasl.server` takes precedence. Deleting that key
+restores the local feature value. `sasl.mechanisms` is optional: if omitted,
+the service validates requested mechanisms and the `sasl` capability has no
+mechanism list. `sasl.timeout` defaults to 30 seconds.
 
 ## API Summary
 ## Accessing Configuration Options in Code

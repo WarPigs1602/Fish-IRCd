@@ -28,7 +28,7 @@ struct StatDesc;
 
 extern struct Client his;
 
-/** Contains all feature settings for ircu.
+/** Contains all feature settings for Fish-IRCd.
  * For documentation of each, see doc/readme.features.
  */
 enum Feature {
@@ -56,6 +56,9 @@ enum Feature {
   FEAT_TRUST_USERNAME,
   FEAT_HIDDEN_HOST,
   FEAT_HIDDEN_IP,
+  FEAT_SETHOST,
+  FEAT_SETHOST_USER,
+  FEAT_SETHOST_AUTO,
   FEAT_CONNEXIT_NOTICES,
   FEAT_OPLEVELS,
   FEAT_ZANNELS,
@@ -113,6 +116,8 @@ enum Feature {
 
   /* features that affect all operators */
   FEAT_CONFIG_OPERCMDS,
+  FEAT_EXTENDED_CHECKCMD,
+  FEAT_USER_HIDECHANS,
 
   /* IRCv3 capabilities */
   FEAT_CAP_ACCOUNTNOTIFY,
@@ -121,11 +126,13 @@ enum Feature {
   FEAT_CAP_ECHOMESSAGE,
   FEAT_CAP_EXTJOIN,
   FEAT_CAP_INVITENOTIFY,
+  FEAT_CAP_MULTI_PREFIX,
   FEAT_CAP_UHNAMES,
   FEAT_CAP_MESSAGE_TAGS,
   FEAT_CAP_SERVER_TIME,
   FEAT_CAP_ACCOUNT_TAG,
   FEAT_CAP_SASL,
+  FEAT_SASL_SERVER,
 
   /* IRCv3 CLIENTTAGDENY: deny-list / allow-list for client-only (+) tags */
   FEAT_CLIENTTAGDENY,

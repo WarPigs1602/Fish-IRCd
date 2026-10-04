@@ -183,6 +183,8 @@ extern const struct Numeric* get_error_numeric(int err);
 #define RPL_JUPELIST         282        /* Undernet extension - jupe -Kev */
 #define RPL_ENDOFJUPELIST    283        /* Undernet extension - jupe -Kev */
 #define RPL_FEATURE	     284	/* Undernet extension - features */
+#define RPL_CHKHEAD          286        /* QuakeNet - Asuka */
+#define RPL_CHANUSER         287        /* QuakeNet - Asuka */
 /*      RPL_CHANINFO_HANDLE  285           aircd */
 /*      RPL_CHANINFO_USERS   286           aircd */
 /*      RPL_CHANINFO_CHOPS   287           aircd */
@@ -190,8 +192,10 @@ extern const struct Numeric* get_error_numeric(int err);
 /*      RPL_CHANINFO_AWAY    289           aircd */
 /*      RPL_CHANINFO_OPERS   290           aircd */
 /*	RPL_HELPHDR	     290	Numeric List: Dalnet */
+#define RPL_DATASTR          290        /* QuakeNet - Asuka */
 /*      RPL_CHANINFO_BANNED  291           aircd */
 /*	RPL_HELPOP	     291	Numeric List: Dalnet */
+#define RPL_ENDOFCHECK	      291        /* QuakeNet - Asuka */
 /*      RPL_CHANINFO_BANS    292           aircd */
 /*	RPL_HELPTLR	     292	Numeric List: Dalnet */
 /*      RPL_CHANINFO_INVITE  293           aircd */
@@ -261,7 +265,7 @@ extern const struct Numeric* get_error_numeric(int err);
 #define RPL_USERIP           340        /* Undernet extension */
 #define RPL_INVITING         341
 /*      RPL_SUMMONING        342           removed from RFC1459 */
-
+#define RPL_WHOISOPERNAME    343        /* QuakeNet Extension */
 #define RPL_ISSUEDINVITE     345        /* Undernet extension */
 #define RPL_INVITELIST       346        /* IRCnet, Undernet extension */
 #define RPL_ENDOFINVITELIST  347        /* IRCnet, Undernet extension */
@@ -314,6 +318,7 @@ extern const struct Numeric* get_error_numeric(int err);
 /*      RPL_END_USERS        394        Dalnet/EFnet/IRCnet */
 /*      RPL_NOUSERS          395        Dalnet/EFnet/IRCnet */
 #define RPL_HOSTHIDDEN       396	/* UMODE +x completed succesfuly */
+#define RPL_USINGSLINE       399	/* QuakeNet extension -froo */
 
 /*
  * Errors are in the range from 400-599 currently and are grouped by what
@@ -327,6 +332,7 @@ extern const struct Numeric* get_error_numeric(int err);
 #define ERR_TOOMANYCHANNELS  405
 #define ERR_WASNOSUCHNICK    406
 #define ERR_TOOMANYTARGETS   407
+#define ERR_SEARCHNOMATCH    408		 /* QuakeNet - Asuka */
 /*      ERR_NOSUCHSERVICE    408  IRCnet */
 /*	ERR_NOCOLORSONCHAN   408  Dalnet */
 #define ERR_NOORIGIN         409
@@ -460,6 +466,8 @@ extern const struct Numeric* get_error_numeric(int err);
 	ERR_WHOLIMEXCEED     523	dalnet */
 #define ERR_QUARANTINED      524       /* Undernet extension -Vampire */
 #define ERR_INVALIDKEY       525        /* Undernet extension */
+#define ERR_BADHOSTMASK      530        /* QuakeNet extension -froo */
+#define ERR_HOSTUNAVAIL      531        /* QuakeNet extension -froo */
 #define ERR_TLSCLIFINGERPRINT 532   /* Nefarious & Undernet extension */
 
 #define ERR_NOTLOWEROPLEVEL  560	/* Undernet extension */

@@ -83,37 +83,36 @@ async def test_local_privmsg_gets_server_time(ircd_network):
             await c.disconnect()
 
 
-async def test_hub_forwards_time_tag_on_s2s_channel(ircd_network, services):
-    """Hub must emit @time= on S2S channel PRIVMSG for downstream servers."""
-    hub = ircd_network["hub"]
-    channel = "#s2stime"
+async def test_hub_strips_all_tags_for_service_servers(ircd_network, services):
+    """Hub must not send any @tags to service servers (FLAG_SERVICE).
 
-    down_num = await services.send_downstream_server("down.s2s.test", 90)
-    await services.send_downstream_nick(
-        down_num, "SvcBot", server_numeric=90, client_num=1,
-    )
-    await services.send_downstream_join("SvcBot", channel)
-    await asyncio.sleep(0.3)
+    Service software parses P10 positionally and cannot strip IRCv3 tags;
+    a tag prefix shifts every field and breaks RPC/command parsing.
+    """
+    hub = ircd_network["hub"]
+    channel = "#s2ssvc"
 
     user = IRCClient()
     await user.connect(hub["host"], hub["port"])
-    await user.register("s2slocal", "testuser", "Local User")
+    await user.register("svcloc", "testuser", "Local User")
 
     try:
         await user.send(f"JOIN {channel}")
         await asyncio.sleep(0.3)
-        await user.send(f"PRIVMSG {channel} :relay check")
+        await user.send(f"PRIVMSG {channel} :no tags to services")
 
         deadline = asyncio.get_event_loop().time() + 5.0
-        tagged = None
+        saw = None
         while asyncio.get_event_loop().time() < deadline:
             remaining = deadline - asyncio.get_event_loop().time()
-            # _recv auto-answers PINGs; keep tags on the returned line.
             line = await services._recv(timeout=max(remaining, 0.1))
-            if "@time=" in line and " P " in f" {line} " and channel in line:
-                tagged = line
+            if " P " in f" {line} " and channel in line and "no tags to services" in line:
+                saw = line
                 break
-        assert tagged, "expected @time= on S2S channel PRIVMSG"
+        assert saw, "expected S2S PRIVMSG to service server"
+        assert not saw.lstrip().startswith("@"), saw
+        assert "@time=" not in saw, saw
+        assert "msgid=" not in saw, saw
     finally:
         try:
             await user.send("QUIT :cleanup")

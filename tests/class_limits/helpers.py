@@ -13,8 +13,8 @@ from irc_client import IRCClient
 REPO_ROOT = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 CONF_PATH = REPO_ROOT / "tests/class_limits/ircd-limits.conf"
 
-CONTAINER = "ircu-limits"
-CONTAINER_CONF = "/opt/ircu/lib/ircd.conf"
+CONTAINER = "fishircd-limits"
+CONTAINER_CONF = "/opt/fishircd/lib/ircd.conf"
 
 # Limits from ircd-limits.conf (kept low enough that one TCP segment can
 # exceed maxflood and trigger Excess Flood on loopback).
@@ -157,7 +157,7 @@ def write_config(text: str) -> None:
         tmp.write(text)
         tmp.close()
         # docker cp preserves the source mode; NamedTemporaryFile creates
-        # 0600, which the in-container ircu user could not read.
+        # 0600, which the in-container fishircd user could not read.
         os.chmod(tmp.name, 0o644)
         subprocess.run(
             ["docker", "cp", tmp.name, f"{CONTAINER}:{CONTAINER_CONF}"],

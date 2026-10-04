@@ -18,7 +18,7 @@
  *
  * $Id$
  *
- * Description: This file has the featureset that ircu announces on connecting
+ * Description: This file has the featureset that Fish-IRCd announces on connecting
  *              a client.  It's in this .h because it's likely to be appended
  *              to frequently and s_user.h is included by basically everyone.
  */

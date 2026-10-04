@@ -90,7 +90,7 @@ void do_who(struct Client* sptr, struct Client* acptr, struct Channel* repchan,
     chan = find_channel_member(acptr, repchan);
   }
   else if ((!fields || (fields & (WHO_FIELD_CHA | WHO_FIELD_FLA)))
-           && !IsChannelService(acptr))
+           && !IsChannelService(acptr) && !IsNoChan(acptr))
   {
     for (chan = cli_user(acptr)->channel; chan; chan = chan->next_channel)
       if (PubChannel(chan->channel) &&
@@ -171,7 +171,8 @@ void do_who(struct Client* sptr, struct Client* acptr, struct Channel* repchan,
     if (!chan) {
       /* No flags possible for the channel, so skip them all. */
     }
-    else if (fields) {
+    /* Added multi-prefix support. */
+    else if (fields || HasCap(sptr, CAP_MULTI_PREFIX)) {
       /* If you specified flags then we assume you know how to parse
        * multiple channel status flags, as this is currently the only
        * way to know if someone has @'s *and* is +'d.

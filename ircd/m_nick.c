@@ -83,6 +83,7 @@
 
 #include "IPcheck.h"
 #include "client.h"
+#include "gline.h"
 #include "hash.h"
 #include "ircd.h"
 #include "ircd_chattr.h"
@@ -178,6 +179,15 @@ int m_nick(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
    */
   if (0 == do_nick_name(nick)) {
     send_reply(sptr, ERR_ERRONEUSNICKNAME, arg);
+    return 0;
+  }
+
+  /*
+   * Check whether the new nick is covered by a nick G-line; if so,
+   * reject the nick change (opers are exempt).
+   */
+  if (IsRegistered(sptr) && !IsAnOper(sptr) && IsNickGlined(sptr, nick)) {
+    send_reply(sptr, ERR_ERRONEUSNICKNAME, nick);
     return 0;
   }
 

@@ -47,6 +47,8 @@
 #include "s_debug.h"
 #include "s_misc.h"
 #include "s_serv.h"
+#include "sasl.h"
+#include "patchlevel.h"
 #include "send.h"
 #include "userload.h"
 
@@ -494,6 +496,7 @@ void set_server_flags(struct Client *cptr, const char *flags)
     case 's': SetService(cptr); break;
     case '6': SetIPv6(cptr); break;
     case 'z': SetTLS(cptr); break;
+    case 'n': SetOperName(cptr); break;
     }
 }
 
@@ -781,6 +784,7 @@ int ms_server(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
     SetFlag(acptr, FLAG_TS8);
   add_client_to_list(acptr);
   hAddClient(acptr);
+  sasl_check_capability();
   if (*parv[5] == 'J')
   {
     SetBurst(acptr);
@@ -803,11 +807,12 @@ int ms_server(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
       continue;
     if (0 == match(cli_name(&me), cli_name(acptr)))
       continue;
-    sendcmdto_one(sptr, CMD_SERVER, bcptr, "%s %d 0 %s %s %s%s +%s%s%s%s :%s",
+    sendcmdto_one(sptr, CMD_SERVER, bcptr, "%s %d 0 %s %s %s%s +%s%s%s%s%s :%s",
                   cli_name(acptr), hop + 1, parv[4], parv[5],
                   NumServCap(acptr), IsHub(acptr) ? "h" : "",
                   IsService(acptr) ? "s" : "", IsIPv6(acptr) ? "6" : "",
-                  IsTLS(acptr) ? "z" : "", cli_info(acptr));
+                   IsTLS(acptr) ? "z" : "", IsSendOperName(acptr) ? "n" : "",
+                  cli_info(acptr));
   }
   
   compute_secure_path_groups();

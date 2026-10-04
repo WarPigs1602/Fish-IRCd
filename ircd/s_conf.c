@@ -80,6 +80,8 @@ struct s_map     *GlobalServiceMapList;
 struct qline     *GlobalQuarantineList;
 /** Global list of webirc authorizations. */
 struct wline*      GlobalWebircList;
+/** Global list of spoofhost S-lines. */
+struct sline*      GlobalSList;
 
 /** Flag for whether to perform ident lookups. */
 int DoIdentLookups;
@@ -974,6 +976,91 @@ void clear_quarantines(void)
   }
 }
 
+/** Free all spoofhost S-lines from #GlobalSList. */
+void clear_slines(void)
+{
+  struct sline *sline;
+  while ((sline = GlobalSList))
+  {
+    GlobalSList = sline->next;
+    MyFree(sline->spoofhost);
+    if (!EmptyString(sline->passwd))
+      MyFree(sline->passwd);
+    if (!EmptyString(sline->realhost))
+      MyFree(sline->realhost);
+    if (!EmptyString(sline->username))
+      MyFree(sline->username);
+    MyFree(sline);
+  }
+}
+
+/*
+ * conf_check_slines()
+ *
+ * Check S lines for the specified client, passed in cptr struct.
+ * If the client's IP is S-lined, process the substitution here.
+ *
+ * Precondition
+ *  cptr != NULL
+ *
+ * Returns
+ *  0 = No S-line found
+ *  1 = S-line found and substitution done.
+ *
+ * -mbuna 9/2001
+ * -froo 1/2003
+ *
+ */
+
+int
+conf_check_slines(struct Client *cptr)
+{
+  struct sline *sconf;
+  char *hostonly;
+
+  for (sconf = GlobalSList; sconf; sconf = sconf->next) {
+    if (sconf->flags == SLINE_FLAGS_IP) {
+      if (!ipmask_check(&(cli_ip(cptr)), &(sconf->address), sconf->bits))
+        continue;
+    } else if (sconf->flags == SLINE_FLAGS_HOSTNAME) {
+        if ((match(sconf->realhost, cli_sockhost(cptr)) != 0) &&
+           (match(sconf->realhost, cli_sock_ip(cptr)) != 0))	/* wildcarded IP address */
+          continue;
+    } else {
+      continue;
+    }
+
+    if (match(sconf->username, cli_user(cptr)->username) == 0) {
+     /* Ignore user part if u@h. */
+     if ((hostonly = strchr(sconf->spoofhost, '@')))
+       hostonly++;
+     else
+       hostonly = sconf->spoofhost;
+
+     if(!*hostonly)
+       continue;
+
+     ircd_strncpy(cli_user(cptr)->host, hostonly, HOSTLEN);
+     log_write(LS_USER, L_INFO, LOG_NOSNOTICE, "S-Line (%s@%s) by (%#R)",
+         cli_user(cptr)->username, hostonly, cptr);
+     return 1;
+    }
+  }
+  return 0;
+}
+
+/** Free a spoofhost S-line allocated by the config parser.
+ * @param[in] spoof S-line to free.
+ */
+void free_spoofhost(struct sline *spoof)
+{
+  MyFree(spoof->spoofhost);
+  MyFree(spoof->passwd);
+  MyFree(spoof->realhost);
+  MyFree(spoof->username);
+  MyFree(spoof);
+}
+
 /** Mark everything in #GlobalWebircList stale. */
 static void webirc_mark_stale(void)
 {
@@ -1132,6 +1219,8 @@ int rehash(struct Client *cptr, int sig)
   clearNickJupes();
 
   clear_quarantines();
+
+  clear_slines();
 
   class_mark_delete();
   mark_listeners_closing();

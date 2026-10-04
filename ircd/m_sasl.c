@@ -80,6 +80,7 @@
 #include "config.h"
 
 #include "client.h"
+#include "capab.h"
 #include "ircd.h"
 #include "ircd_events.h"
 #include "ircd_log.h"
@@ -119,11 +120,13 @@ static void sasl_timeout_callback(struct Event* ev)
     Debug((DEBUG_DEBUG, "SASL timeout for client %s (cookie: %lu)",
            cli_name(cptr), cli_sasl(cptr)));
     
-    /* Send timeout error to client */
+    /* Notify services as well, so an unfinished exchange can be discarded. */
+    sasl_send_abort(cptr);
     send_reply(cptr, ERR_SASLFAIL, "Authentication timed out");
     
     /* Clear SASL session */
     sasl_stop_timeout(cptr);
+    sasl_session_remove(cli_sasl(cptr));
     cli_sasl(cptr) = 0;
   }
 }
@@ -155,7 +158,8 @@ static void sasl_start_timeout(struct Client* cptr)
 int m_sasl(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
 {
   struct Client* acptr;
-  static uint64_t routing_ticker = 0;
+  const char* target;
+  static unsigned long routing_ticker = 0;
 
   if (parc < 2 || *parv[1] == '\0')
     return need_more_params(sptr, "AUTHENTICATE");
@@ -163,33 +167,43 @@ int m_sasl(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
   if (!CapHas(cli_active(cptr), CAP_SASL))
     return 0;
 
-  if (HasFlag(sptr, FLAG_SASL) || HasFlag(sptr, FLAG_ACCOUNT))
-    return send_reply(cptr, ERR_SASLALREADY);
+  /* A final '+' can already be in flight when services completes SASL. */
+  if (HasFlag(sptr, FLAG_SASL) && !cli_sasl(cptr)
+      && strcmp(parv[1], "+") == 0)
+    return 0;
 
-  acptr = find_match_server((char*)netconf_str(NETCONF_SASL_SERVER));
-  if (!sasl_available() || !acptr)
-    return send_reply(cptr, ERR_SASLFAIL, "The login server is currently disconnected.  Please excuse the inconvenience.");
+  /* IAuth can set a provisional account before registration. SASL may
+   * replace that account, but a completed SASL or registered login cannot. */
+  if (HasFlag(sptr, FLAG_SASL)
+      || (IsUser(sptr) && HasFlag(sptr, FLAG_ACCOUNT)))
+    return send_reply(cptr, ERR_SASLALREADY);
 
   if (strlen(parv[1]) > 400)
     return send_reply(cptr, ERR_SASLTOOLONG);
  
   if (strcmp(parv[1], "*") == 0) {
-    /* SASL abort - stop timeout and clear session */
     if (cli_sasl(cptr)) {
+      sasl_send_abort(cptr);
       sasl_stop_timeout(cptr);
+      sasl_session_remove(cli_sasl(cptr));
       cli_sasl(cptr) = 0;
     }
     send_reply(cptr, ERR_SASLABORTED);
     return 0;
   }
 
+  acptr = *sasl_server() ? find_match_server((char*)sasl_server()) : NULL;
+  if (!sasl_available() || !acptr)
+    return send_reply(cptr, ERR_SASLFAIL, "The login server is currently disconnected.  Please excuse the inconvenience.");
+
   /* Is this the initial authentication challenge? */
   if (!cli_sasl(cptr)) {
     if (!sasl_mechanism_supported(parv[1]))
       return send_reply(cptr, RPL_SASLMECHS, netconf_str(NETCONF_SASL_MECHANISMS));
 
-    if (++routing_ticker == 0)
-      ++routing_ticker; 
+    do {
+      ++routing_ticker;
+    } while (!routing_ticker || find_sasl_client(routing_ticker));
     
     cli_sasl(cptr) = routing_ticker;
     sasl_session_add(routing_ticker, cptr);
@@ -199,27 +213,13 @@ int m_sasl(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
 
     /* Start timeout for new session */
     sasl_start_timeout(cptr);
-
-    /* Send the initial SASL message to the authentication server */
-    if (IsUser(cptr)) {
-      /* Is the user already registered? We then send the NumNick. */
-      sendcmdto_one(&me, CMD_XQUERY, acptr, "%C sasl:%lu :SASL %s%s %s",
-                    acptr, cli_sasl(cptr), NumNick(cptr), parv[1]);
-    } else {
-      /* If not, we pass on the IP and fingerprint. */
-      sendcmdto_one(&me, CMD_XQUERY, acptr, "%C sasl:%lu :SASL %s %s %s",
-                    acptr, cli_sasl(cptr), ircd_ntoa(&cli_ip(cptr)),
-                    *cli_tls_fingerprint(cptr) ? cli_tls_fingerprint(cptr) : "_",
-                    parv[1]);
-    }
-  } else {
-    /* Continuation message - cli_sasl(cptr) should be non-zero */
-    assert(cli_sasl(cptr) != 0);
-    
-    /* Send continuation SASL message (timer keeps running) */
-    sendcmdto_one(&me, CMD_XQUERY, acptr, "%C sasl:%lu :SASL %s",
-                  acptr, cli_sasl(cptr), parv[1]);
   }
+
+  target = sasl_session_target((unsigned long)cli_sasl(cptr));
+  assert(target != NULL);
+  sendcmdto_one(&me, CMD_AUTHENTICATE, acptr, "%s %s %s", target,
+                sasl_session_host((unsigned long)cli_sasl(cptr)),
+                parv[1]);
 
   return 0;
 }

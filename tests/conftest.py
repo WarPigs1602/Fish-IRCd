@@ -1,4 +1,4 @@
-"""pytest fixtures for ircu2 integration testing."""
+"""pytest fixtures for Fish-IRCd integration testing."""
 
 import os
 import subprocess
@@ -269,7 +269,7 @@ def _start_topology_nf_compat():
             wait_for_port(server["host"], server["port"], timeout=120.0)
         except TimeoutError:
             # Surface container logs — config/parse failures are otherwise silent.
-            for name in ("ircu-nf-a", "ircu-nf-b", "ircu-nf-c"):
+            for name in ("fishircd-nf-a", "fishircd-nf-b", "fishircd-nf-c"):
                 result = subprocess.run(
                     ["docker", "logs", "--tail", "80", name],
                     capture_output=True,

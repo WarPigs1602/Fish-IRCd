@@ -1,4 +1,4 @@
-"""Lightweight P10 fake server for testing ircu2 S2S behavior.
+"""Lightweight P10 fake server for testing Fish-IRCd S2S behavior.
 
 Connects to an ircd as a server, completes the P10 handshake (PASS,
 SERVER, burst, EB/EA), and exposes methods to send S2S protocol

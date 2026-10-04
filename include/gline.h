@@ -49,6 +49,7 @@ enum GlineLocalState {
 struct Gline {
   struct Gline *gl_next;	/**< Next G-line in linked list. */
   struct Gline**gl_prev_p;	/**< Previous pointer to this G-line. */
+  char	       *gl_nick;	/**< Nickname mask. */
   char	       *gl_user;	/**< Username mask (or channel/realname mask). */
   char	       *gl_host;	/**< Host portion of mask. */
   char	       *gl_reason;	/**< Reason for G-line. */
@@ -110,6 +111,8 @@ enum GlineAction {
 /** Test whether \a g is local to this server. */
 #define GlineIsLocal(g)		((g)->gl_flags & GLINE_LOCAL)
 
+/** Return nick mask of a G-line. */
+#define GlineNick(g)		((g)->gl_nick)
 /** Return user mask of a G-line. */
 #define GlineUser(g)		((g)->gl_user)
 /** Return host mask of a G-line. */
@@ -136,6 +139,7 @@ extern int gline_destroy(struct Client *cptr, struct Client *sptr,
 			 struct Gline *gline);
 extern struct Gline *gline_find(char *userhost, unsigned int flags);
 extern struct Gline *gline_lookup(struct Client *cptr, unsigned int flags);
+extern struct Gline *gline_lookup_badchan(char *userhost, unsigned int flags);
 extern void gline_free(struct Gline *gline);
 extern void gline_burst(struct Client *cptr);
 extern int gline_resend(struct Client *cptr, struct Gline *gline);
@@ -143,5 +147,6 @@ extern int gline_list(struct Client *sptr, char *userhost, int is_oper);
 extern void gline_stats(struct Client *sptr, const struct StatDesc *sd,
                         char *param);
 extern int gline_memory_count(size_t *gl_size);
+extern struct Gline *IsNickGlined(struct Client *cptr, char *nick);
 
 #endif /* INCLUDED_gline_h */

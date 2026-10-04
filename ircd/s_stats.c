@@ -465,10 +465,10 @@ stats_servers_verbose(struct Client* sptr, const struct StatDesc* sd,
                ":%-20s %-20s Flags  Hops %-8s %5s %4s %4s %4s %5s %6s %-6s %-10s Info",
                "Servername", "Uplink", "Numeric", "Lag", "RTT", "Up", "Down",
                "Users", "Max", "Proto", "LinkTS");
-    fmt = ":%-20s %-20s %c%c%c%c%c%c %4i %-8s %5i %4i %4i %4i %5i %6i P%-2i    %10Tu %s";
+    fmt = ":%-20s %-20s %c%c%c%c%c%c%c %4i %-8s %5i %4i %4i %4i %5i %6i P%-2i    %10Tu %s";
   } else {
     /* Two fields for numeric: base64 token (NumServ) and integer form */
-    fmt = "%s %s %c%c%c%c%c%c %i %s %u %i %i %i %i %i %i P%i %Tu :%s";
+    fmt = "%s %s %c%c%c%c%c%c%c %i %s %u %i %i %i %i %i %i %i P%i %Tu :%s";
   }
 
   for (acptr = GlobalClientList; acptr; acptr = cli_next(acptr))
@@ -486,13 +486,14 @@ stats_servers_verbose(struct Client* sptr, const struct StatDesc* sd,
       send_reply(sptr, SND_EXPLICIT | RPL_STATSVERBOSE, fmt,
                  cli_name(acptr),
                  cli_name(cli_serv(acptr)->up),
-                 IsBurst(acptr) ? 'B' : '-',
-                 IsBurstAck(acptr) ? 'A' : '-',
-                 IsHub(acptr) ? 'H' : '-',
-                 IsService(acptr) ? 'S' : '-',
-                 IsIPv6(acptr) ? '6' : '-',
-                 IsTLS(acptr) ? 'Z' : '-',
-                 cli_hopcount(acptr),
+                  IsBurst(acptr) ? 'B' : '-',
+                  IsBurstAck(acptr) ? 'A' : '-',
+                  IsHub(acptr) ? 'H' : '-',
+                  IsService(acptr) ? 'S' : '-',
+                  IsIPv6(acptr) ? '6' : '-',
+                  IsTLS(acptr) ? 'Z' : '-',
+                  IsSendOperName(acptr) ? 'n' : '-',
+                  cli_hopcount(acptr),
                  numbuf,
                  cli_serv(acptr)->lag,
                  cli_serv(acptr)->asll_rtt,
@@ -512,19 +513,20 @@ stats_servers_verbose(struct Client* sptr, const struct StatDesc* sd,
                  IsHub(acptr) ? 'H' : '-',
                  IsService(acptr) ? 'S' : '-',
                  IsIPv6(acptr) ? '6' : '-',
-                 IsTLS(acptr) ? 'Z' : '-',
-                 cli_hopcount(acptr),
-                 NumServ(acptr),
-                 base64toint(cli_yxx(acptr)),
-                 cli_serv(acptr)->lag,
-                 cli_serv(acptr)->asll_rtt,
-                 cli_serv(acptr)->asll_to,
-                 cli_serv(acptr)->asll_from,
-                 (acptr == &me ? UserStats.local_clients : cli_serv(acptr)->clients),
-                 cli_serv(acptr)->nn_mask,
-                 cli_serv(acptr)->prot,
-                 cli_serv(acptr)->timestamp,
-                 cli_info(acptr));
+                  IsTLS(acptr) ? 'Z' : '-',
+                  IsSendOperName(acptr) ? 'n' : '-',
+                  cli_hopcount(acptr),
+                  NumServ(acptr),
+                  base64toint(cli_yxx(acptr)),
+                  cli_serv(acptr)->lag,
+                  cli_serv(acptr)->asll_rtt,
+                  cli_serv(acptr)->asll_to,
+                  cli_serv(acptr)->asll_from,
+                  (acptr == &me ? UserStats.local_clients : cli_serv(acptr)->clients),
+                  cli_serv(acptr)->nn_mask,
+                  cli_serv(acptr)->prot,
+                  cli_serv(acptr)->timestamp,
+                  cli_info(acptr));
     }
   }
 }

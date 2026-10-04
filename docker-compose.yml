@@ -6,12 +6,12 @@ services:
         IRCD_CONF: tests/docker/ircd-hub.conf
         TLS_BACKEND: ${TLS_BACKEND:-openssl}
         SANITIZE: ${IRCD_SANITIZE:-}
-    container_name: ircu-hub
+    container_name: fishircd-hub
     environment:
       IRCD_DEBUG: ${IRCD_DEBUG:-}
-      ASAN_OPTIONS: ${ASAN_OPTIONS:-abort_on_error=1:halt_on_error=1:detect_leaks=0:log_path=/opt/ircu/debug/asan}
+      ASAN_OPTIONS: ${ASAN_OPTIONS:-abort_on_error=1:halt_on_error=1:detect_leaks=0:log_path=/opt/fishircd/debug/asan}
     volumes:
-      - ${IRCD_DEBUG_DIR:-./tests/debug-output}:/opt/ircu/debug
+      - ${IRCD_DEBUG_DIR:-./tests/debug-output}:/opt/fishircd/debug
     security_opt:
       - seccomp:unconfined
     ulimits:
@@ -28,7 +28,7 @@ services:
       - "7001:7001"
       - "7002:7002"
     networks:
-      ircu-test-net:
+      fishircd-test-net:
         ipv4_address: 10.55.0.10
 
   ircd-leaf1:
@@ -36,13 +36,13 @@ services:
       context: .
       args:
         IRCD_CONF: tests/docker/ircd-leaf1.conf
-    container_name: ircu-leaf1
+    container_name: fishircd-leaf1
     ports:
       - "6668:6668"
       - "4401:4401"
       - "6690:6690"
     networks:
-      ircu-test-net:
+      fishircd-test-net:
         ipv4_address: 10.55.0.11
     depends_on:
       - ircd-hub
@@ -52,12 +52,12 @@ services:
       context: .
       args:
         IRCD_CONF: tests/docker/ircd-leaf2.conf
-    container_name: ircu-leaf2
+    container_name: fishircd-leaf2
     ports:
       - "6669:6669"
       - "4402:4402"
     networks:
-      ircu-test-net:
+      fishircd-test-net:
         ipv4_address: 10.55.0.12
     depends_on:
       - ircd-hub
@@ -69,12 +69,12 @@ services:
         IRCD_CONF: tests/docker/ircd-tls-hub.conf
         TLS_BACKEND: ${TLS_BACKEND:-openssl}
         SANITIZE: ${IRCD_SANITIZE:-}
-    container_name: ircu-tls-hub
+    container_name: fishircd-tls-hub
     environment:
       IRCD_DEBUG: ${IRCD_DEBUG:-}
-      ASAN_OPTIONS: ${ASAN_OPTIONS:-abort_on_error=1:halt_on_error=1:detect_leaks=0:log_path=/opt/ircu/debug/asan}
+      ASAN_OPTIONS: ${ASAN_OPTIONS:-abort_on_error=1:halt_on_error=1:detect_leaks=0:log_path=/opt/fishircd/debug/asan}
     volumes:
-      - ${IRCD_DEBUG_DIR:-./tests/debug-output}:/opt/ircu/debug
+      - ${IRCD_DEBUG_DIR:-./tests/debug-output}:/opt/fishircd/debug
     security_opt:
       - seccomp:unconfined
     ulimits:
@@ -94,7 +94,7 @@ services:
       - "14440:4440"
       - "14441:4441"
     networks:
-      ircu-test-net:
+      fishircd-test-net:
         ipv4_address: 10.55.0.20
 
   ircd-tls-leaf:
@@ -104,12 +104,12 @@ services:
         IRCD_CONF: tests/docker/ircd-tls-leaf.conf
         TLS_BACKEND: ${TLS_BACKEND:-openssl}
         SANITIZE: ${IRCD_SANITIZE:-}
-    container_name: ircu-tls-leaf
+    container_name: fishircd-tls-leaf
     environment:
       IRCD_DEBUG: ${IRCD_DEBUG:-}
-      ASAN_OPTIONS: ${ASAN_OPTIONS:-abort_on_error=1:halt_on_error=1:detect_leaks=0:log_path=/opt/ircu/debug/asan}
+      ASAN_OPTIONS: ${ASAN_OPTIONS:-abort_on_error=1:halt_on_error=1:detect_leaks=0:log_path=/opt/fishircd/debug/asan}
     volumes:
-      - ${IRCD_DEBUG_DIR:-./tests/debug-output}:/opt/ircu/debug
+      - ${IRCD_DEBUG_DIR:-./tests/debug-output}:/opt/fishircd/debug
     security_opt:
       - seccomp:unconfined
     ulimits:
@@ -125,7 +125,7 @@ services:
       - "14411:4401"
       - "14412:4402"
     networks:
-      ircu-test-net:
+      fishircd-test-net:
         ipv4_address: 10.55.0.21
     depends_on:
       - ircd-tls-hub
@@ -140,27 +140,27 @@ services:
       context: .
       args:
         IRCD_CONF: tests/class_limits/ircd-limits.conf
-    container_name: ircu-limits
-    command: ["-f", "/opt/ircu/lib/ircd.conf", "-n", "-x", "8"]
+    container_name: fishircd-limits
+    command: ["-f", "/opt/fishircd/lib/ircd.conf", "-n", "-x", "8"]
     ports:
       - "6670:6670"
       - "4410:4410"
     networks:
-      ircu-test-net:
+      fishircd-test-net:
         ipv4_address: 10.55.0.30
 
   test-dns:
     build:
       context: .
       dockerfile: tests/dns_server/Dockerfile
-    container_name: ircu-test-dns
+    container_name: fishircd-test-dns
     environment:
       CLIENT_IPV4: "10.55.0.1"
       AAAA_TARGET: "fdaa:1:1::42"
     ports:
       - "8053:8053"
     networks:
-      ircu-test-net:
+      fishircd-test-net:
         ipv4_address: 10.55.0.31
 
   ircd-dns-hub:
@@ -170,12 +170,12 @@ services:
         IRCD_CONF: tests/docker/ircd-dns-hub.conf
         TLS_BACKEND: ${TLS_BACKEND:-openssl}
         SANITIZE: ${IRCD_SANITIZE:-}
-    container_name: ircu-dns-hub
+    container_name: fishircd-dns-hub
     environment:
       IRCD_DEBUG: ${IRCD_DEBUG:-}
-      ASAN_OPTIONS: ${ASAN_OPTIONS:-abort_on_error=1:halt_on_error=1:detect_leaks=0:log_path=/opt/ircu/debug/asan}
+      ASAN_OPTIONS: ${ASAN_OPTIONS:-abort_on_error=1:halt_on_error=1:detect_leaks=0:log_path=/opt/fishircd/debug/asan}
     volumes:
-      - ${IRCD_DEBUG_DIR:-./tests/debug-output}:/opt/ircu/debug
+      - ${IRCD_DEBUG_DIR:-./tests/debug-output}:/opt/fishircd/debug
     security_opt:
       - seccomp:unconfined
     ulimits:
@@ -189,7 +189,7 @@ services:
       - "6671:6670"
       - "6672:6672"
     networks:
-      ircu-test-net:
+      fishircd-test-net:
         ipv4_address: 10.55.0.15
     depends_on:
       - test-dns
@@ -203,12 +203,12 @@ services:
       args:
         IRCD_CONF: tests/docker/ircd-nf-a.conf
         IRCD_RELEASE_TAG: ${IRCD_RELEASE_TAG:-u2.10.12.19}
-    container_name: ircu-nf-a
+    container_name: fishircd-nf-a
     ports:
       - "6674:6674"
       - "4420:4420"
     networks:
-      ircu-test-net:
+      fishircd-test-net:
         ipv4_address: 10.55.0.40
     depends_on:
       - ircd-nf-b
@@ -221,13 +221,13 @@ services:
         IRCD_CONF: tests/docker/ircd-nf-b.conf
         TLS_BACKEND: ${TLS_BACKEND:-openssl}
         SANITIZE: ${IRCD_SANITIZE:-}
-    container_name: ircu-nf-b
+    container_name: fishircd-nf-b
     ports:
       - "6675:6675"
       - "7692:7692"
       - "4421:4421"
     networks:
-      ircu-test-net:
+      fishircd-test-net:
         ipv4_address: 10.55.0.41
 
   ircd-nf-c:
@@ -238,18 +238,18 @@ services:
         IRCD_CONF: tests/docker/ircd-nf-c.conf
         TLS_BACKEND: ${TLS_BACKEND:-openssl}
         SANITIZE: ${IRCD_SANITIZE:-}
-    container_name: ircu-nf-c
+    container_name: fishircd-nf-c
     ports:
       - "6676:6676"
       - "4422:4422"
     networks:
-      ircu-test-net:
+      fishircd-test-net:
         ipv4_address: 10.55.0.42
     depends_on:
       - ircd-nf-b
 
 networks:
-  ircu-test-net:
+  fishircd-test-net:
     driver: bridge
     ipam:
       config:

@@ -43,6 +43,7 @@ ircd_SOURCES = \
 	m_away.c \
 	m_burst.c \
 	m_cap.c \
+	m_check.c \
 	m_clearmode.c \
 	m_close.c \
 	m_config.c \
@@ -92,6 +93,7 @@ ircd_SOURCES = \
 	m_rping.c \
 	m_rpong.c \
 	m_sasl.c \
+	m_sethost.c \
 	m_server.c \
 	m_set.c \
 	m_settime.c \

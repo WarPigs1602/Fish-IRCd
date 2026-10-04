@@ -383,11 +383,13 @@ badid:
 int auth_set_account(struct AuthRequest *auth, const char *account_info)
 {
   struct Client *sptr;
-  char *account_copy = NULL, *account = NULL, *id_str = NULL, *flags_str = NULL, *extra = NULL;
+  char *account_copy = NULL, *account = NULL, *id_str = NULL, *create_str = NULL, *extra = NULL;
 
   assert(auth != NULL);
 
   sptr = auth->client;
+  if (HasFlag(sptr, FLAG_SASL))
+    return 0; /* A late IAuth response must not overwrite SASL's account. */
   if (!cli_user(sptr) || EmptyString(account_info))
     return 1;
 
@@ -397,8 +399,8 @@ int auth_set_account(struct AuthRequest *auth, const char *account_info)
     return 1;
 
   account = strtok(account_copy, ":");
-  id_str = strtok(NULL, ":");
-  flags_str = strtok(NULL, " ");
+  create_str = strtok(NULL, ":");
+  id_str = strtok(NULL, " ");
   extra = strtok(NULL, "");
 
   /* A malformed reply may contain no account name at all. */
@@ -410,13 +412,13 @@ int auth_set_account(struct AuthRequest *auth, const char *account_info)
   /* Copy account name to User structure */
   ircd_strncpy(cli_user(sptr)->account, account, ACCOUNTLEN);
 
+  if (create_str) {
+    cli_user(sptr)->acc_create = strtoul(create_str, NULL, 10);
+  }
+
   /* Parse account ID if provided */
   if (id_str) {
     cli_user(sptr)->acc_id = strtoul(id_str, NULL, 10);
-  }
-
-  if (flags_str) {
-    cli_user(sptr)->acc_flags = strtoul(flags_str, NULL, 10);
   }
 
   SetAccount(sptr);
@@ -597,7 +599,7 @@ static int check_auth_finished(struct AuthRequest *auth, int bitclr)
 
     /* Do we need to tell IAuth to hurry up? */
     if (hurry_up && IAuthHas(iauth, IAUTH_UNDERNET))
-      sendto_iauth(auth->client, "H");
+        sendto_iauth(auth->client, "H %s", get_client_class(auth->client)); /* snircd compatibility */
 
     Debug((DEBUG_INFO, "Auth %p [%d] still has flag %d", auth,
            cli_fd(auth->client), AR_IAUTH_PENDING));
@@ -2355,23 +2357,20 @@ static int iauth_cmd_done_account(struct IAuth *iauth, struct Client *cli,
     sendto_iauth(cli, "E Invalid :Account parameter too long");
     return 0;
   }
-  /* If account has an id, use it. */
+  /* If account has a creation timestamp, use it. */
   assert(cli_user(cli) != NULL);
-  if (params[0][len] == ':') {
-    cli_user(cli)->acc_id = strtoul(params[0] + len + 1, NULL, 10);
-    params[0][len] = '\0';
-
-    /* If account has flags, use it. */
-    char *flags_start = strchr(params[0] + len + 1, ':');
-    if (flags_start != NULL) {
-        cli_user(cli)->acc_flags = strtoul(flags_start + 1, NULL, 10);
-        *flags_start = '\0';
+  if (!HasFlag(cli, FLAG_SASL)) {
+    if (params[0][len] == ':') {
+      char *end;
+      cli_user(cli)->acc_create = strtoul(params[0] + len + 1, &end, 10);
+      if (*end == ':')
+        cli_user(cli)->acc_id = strtoul(end + 1, NULL, 10);
     }
-  }
 
-  /* Copy account name to User structure. */
-  ircd_strncpy(cli_user(cli)->account, params[0], ACCOUNTLEN);
-  SetAccount(cli);
+    /* Copy account name to User structure. */
+    ircd_strncpy(cli_user(cli)->account, params[0], ACCOUNTLEN);
+    SetAccount(cli);
+  }
 
   /* Fall through to the normal "done" handler. */
   return iauth_cmd_done_client(iauth, cli, parc - 1, params + 1);

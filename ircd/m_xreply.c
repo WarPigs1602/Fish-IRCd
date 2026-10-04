@@ -90,7 +90,6 @@
 #include "numnicks.h"
 #include "s_auth.h"
 #include "send.h"
-#include "sasl.h"
 #include "sline.h"
 
 #include <string.h>
@@ -131,8 +130,6 @@ int ms_xreply(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
   /* OK, figure out where to route the message */
   if (!ircd_strncmp("iauth:", routing, 6))
     auth_send_xreply(sptr, routing + 6, reply);
-  else if (!ircd_strncmp("sasl:", routing, 5))
-    sasl_send_xreply(sptr, routing + 5, reply);
   else if (!ircd_strncmp("spam:", routing, 5))
     sline_xreply_handler(sptr, routing + 5, reply);
   else

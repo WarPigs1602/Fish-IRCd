@@ -1,3 +1,8 @@
+Fish-IRCd
+
+Fish-IRCd is a fork of ircu2 (https://github.com/UndernetIRC/ircu2).
+Some elements are derived from snircd (https://codeberg.org/quakenet/snircd).
+The goal is to achieve full snircd compatibility based on the current ircu2.
 
 	Welcome to ircu2.10.12, the Undernet IRC daemon
 

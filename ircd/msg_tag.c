@@ -269,6 +269,9 @@ msg_tag_client_allowed(const char *key)
   if (!msg_tag_key_client_only(key))
     return 0;
 
+  if (!ircd_strcmp(key, "+typing"))
+    return 1;
+
   name = clienttag_lookup_name(key);
   if (!name || !*name)
     return 0;
@@ -371,8 +374,9 @@ msg_tag_s2s_needs_time(const char *tok)
       /* Server<->services RPC: consumed by services software that parses
        * P10 fields positionally and does not strip tags.  A @time= prefix
        * shifts every field and breaks SASL/spamfilter routing. */
-      || !ircd_strcmp(tok, TOK_XQUERY)
-      || !ircd_strcmp(tok, TOK_XREPLY)
+       || !ircd_strcmp(tok, TOK_XQUERY)
+       || !ircd_strcmp(tok, TOK_XREPLY)
+       || !ircd_strcmp(tok, TOK_AUTHENTICATE)
       || !ircd_strcmp(tok, TOK_DESTRUCT))
     return 0;
   return 1;
@@ -441,7 +445,7 @@ msg_tag_format_s2s(char *buf, size_t buflen, struct MsgTag *tags,
   for (tag = tags; tag; tag = tag->next) {
     if (!ircd_strcmp(tag->key, "time") || !ircd_strcmp(tag->key, "account"))
       continue;
-    if (msg_tag_key_client_only(tag->key))
+    if (msg_tag_key_client_only(tag->key) && ircd_strcmp(tag->key, "+typing"))
       continue;
     if (!msg_tag_key_federated(tag->key))
       continue;

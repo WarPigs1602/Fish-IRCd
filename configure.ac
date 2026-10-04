@@ -22,7 +22,7 @@ dnl
 
 dnl Make sure we are in the correct directory (someone could have run
 dnl 'configure' with a wrong '--srcdir').
-AC_INIT([ircu2], [10.12.19])
+AC_INIT([Fish-IRCd], [1.0-SNAPSHOT])
 AC_CONFIG_SRCDIR([ircd/ircd.c])
 AC_CONFIG_MACRO_DIRS([m4])
 
@@ -45,17 +45,8 @@ AC_CONFIG_HEADERS([config.h])
 AM_INIT_AUTOMAKE([foreign subdir-objects dist-xz])
 
 dnl ---------------------------------------------------------------------------
-dnl Version component defines — derived from AC_INIT version (MAJOR.MINOR.PATCH)
-dnl This is the single source of truth for all version information.
+dnl Version component defines — now provided by include/patchlevel.h (snircd-style)
 dnl ---------------------------------------------------------------------------
-m4_define([v_major], m4_bregexp(AC_PACKAGE_VERSION, [\([0-9]+\)\.\([0-9]+\)\.\([0-9]+\)], [\1]))
-m4_define([v_minor], m4_bregexp(AC_PACKAGE_VERSION, [\([0-9]+\)\.\([0-9]+\)\.\([0-9]+\)], [\2]))
-m4_define([v_patch], m4_bregexp(AC_PACKAGE_VERSION, [\([0-9]+\)\.\([0-9]+\)\.\([0-9]+\)], [\3]))
-
-AC_DEFINE([BASE_VERSION],   ["u2.]v_major["],  [Base version prefix, e.g. "u2.10"])
-AC_DEFINE([MAJOR_PROTOCOL], ["]v_major["],      [Major protocol version, e.g. "10"])
-AC_DEFINE([RELEASE],        [".]v_minor[."],    [Release number with dots, e.g. ".12."])
-AC_DEFINE([PATCHLEVEL],     ["]v_patch["],      [Patch level, e.g. "19"])
 
 dnl Demand at least version 2.69 of autoconf
 AC_PREREQ([2.69])
@@ -763,7 +754,7 @@ AC_OUTPUT
 
 dnl Report configuration
 echo "
-ircu is now hopefully configured for your system.
+Fish-IRCd is now hopefully configured for your system.
 
   Host system:         $host_os
   Prefix:              $prefix

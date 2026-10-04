@@ -10,7 +10,7 @@
  * SHA-1 implementation by Steve Reid / OpenBSD, public domain.
  */
 /** @file
- * @brief SHA-1 implementation for ircu.
+ * @brief SHA-1 implementation for Fish-IRCd.
  */
 #include "ircd_sha1.h"
 #include <stdint.h>

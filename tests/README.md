@@ -1,6 +1,6 @@
-# ircu2 Test Harness
+# Fish-IRCd Test Harness
 
-Python-based integration test suite for ircu2 using Docker and pytest.
+Python-based integration test suite for Fish-IRCd using Docker and pytest.
 
 ## Prerequisites
 
@@ -237,7 +237,7 @@ The P10 server handles the full handshake (PASS, SERVER, burst, EB/EA), auto-res
 4. Write `test_edge_cases.py` — try to break it
 5. Use `@pytest.mark.single_server` or `@pytest.mark.multi_server`
 6. For S2S protocol tests, use `P10Server` to connect as a fake server
-7. Use the `/ircu2-test` Claude skill for automated test generation
+7. Use the `/fish-ircd-test` Claude skill for automated test generation
 
 ## Troubleshooting
 

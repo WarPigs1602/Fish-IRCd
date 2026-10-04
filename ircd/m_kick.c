@@ -131,7 +131,7 @@ int m_kick(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
     return 0; /* find_chasing sends the reply for us */
 
   /* Don't allow the channel service to be kicked */
-  if (IsChannelService(who))
+  if (IsChannelService(who) && !IsXtraOp(sptr) && (who!=sptr))
     return send_reply(sptr, ERR_ISCHANSERVICE, cli_name(who), chptr->chname);
 
   /* Prevent kicking opers from local channels -DM- */

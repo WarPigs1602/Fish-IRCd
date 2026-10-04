@@ -15,9 +15,24 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * Version components (BASE_VERSION, RELEASE, PATCHLEVEL, MAJOR_PROTOCOL)
- * are defined in config.h, generated from the single source of truth
- * in configure.ac via AC_INIT.
+ * $Id$
+ *
  */
+#define PATCHLEVEL "19"
 
-#include "config.h"
+#define RELEASE ".12."
+
+/*
+ * Deliberate empty lines
+ */
+/* Do NOT edit those: */
+
+#ifndef BASE_VERSION
+#define BASE_VERSION "u2.10"
+#endif
+
+#ifndef MAJOR_PROTOCOL
+#define MAJOR_PROTOCOL "10"
+#endif
+
+#define FISH_IRC_VERSION "Fish-IRCd(1.0-SNAPSHOT)"

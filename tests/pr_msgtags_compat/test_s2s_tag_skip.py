@@ -211,3 +211,27 @@ async def test_untagged_privmsg_unchanged(ircd_network, services):
         except Exception:
             pass
         await user.disconnect()
+
+
+async def test_typing_tag_relayed_s2s(ircd_network, services):
+    """+typing tag must survive S2S relay to the target client."""
+    hub = ircd_network["hub"]
+
+    user = IRCClient()
+    await user.connect(hub["host"], hub["port"])
+    await user.register("typetest", "testuser", "Typing Test User")
+
+    try:
+        numnick = await services.wait_for_user("typetest")
+        await services._send(
+            f"@+typing=active {services._num} P {numnick} :typing relay"
+        )
+        msg = await user.wait_for("PRIVMSG", timeout=5.0)
+        assert msg.params[-1] == "typing relay", msg
+        assert "+typing=active" in msg.tags, msg
+    finally:
+        try:
+            await user.send("QUIT :cleanup")
+        except Exception:
+            pass
+        await user.disconnect()

@@ -1,4 +1,4 @@
-"""Debug helpers for ircu2 integration tests.
+"""Debug helpers for Fish-IRCd integration tests.
 
 Two complementary toolkits:
 
@@ -38,8 +38,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DEBUG_DIR = REPO_ROOT / "tests" / "debug-output"
 FAILURES_DIR = DEFAULT_DEBUG_DIR / "failures"
 
-HUB_CONTAINER = "ircu-hub"
-HUB_IMAGE = "ircu2-ircd-hub"
+HUB_CONTAINER = "fishircd-hub"
+HUB_IMAGE = "fishircd-ircd-hub"
 
 DEBUG_LOG_NAMES = (
     "gdb.log",
@@ -54,21 +54,21 @@ SNO_DEBUG = 65536
 
 # Common locations for the DEBUGMODE log file inside test containers.
 DEBUG_LOG_PATHS = (
-    "/opt/ircu/ircd.log",
-    "/opt/ircu/lib/ircd.log",
+    "/opt/fishircd/ircd.log",
+    "/opt/fishircd/lib/ircd.log",
 )
 
 # Service name (docker-compose) -> container_name mapping.
 SERVICE_CONTAINERS: dict[str, str] = {
-    "ircd-hub": "ircu-hub",
-    "ircd-leaf1": "ircu-leaf1",
-    "ircd-leaf2": "ircu-leaf2",
-    "ircd-tls-hub": "ircu-tls-hub",
-    "ircd-tls-leaf": "ircu-tls-leaf",
-    "ircd-limits": "ircu-limits",
-    "ircd-nf-a": "ircu-nf-a",
-    "ircd-nf-b": "ircu-nf-b",
-    "ircd-nf-c": "ircu-nf-c",
+    "ircd-hub": "fishircd-hub",
+    "ircd-leaf1": "fishircd-leaf1",
+    "ircd-leaf2": "fishircd-leaf2",
+    "ircd-tls-hub": "fishircd-tls-hub",
+    "ircd-tls-leaf": "fishircd-tls-leaf",
+    "ircd-limits": "fishircd-limits",
+    "ircd-nf-a": "fishircd-nf-a",
+    "ircd-nf-b": "fishircd-nf-b",
+    "ircd-nf-c": "fishircd-nf-c",
 }
 
 DEBUG_LINE_RE = re.compile(r"DEBUG \[(\w+)\]: (.+)$")
@@ -114,8 +114,8 @@ def _find_latest_core() -> Path | None:
 def analyze_core_postmortem(core: Path, dest: Path) -> str:
     """Run gdb on a core file from the test image; save and return backtrace."""
     out_path = dest / "core-backtrace.txt"
-    mount = f"{debug_output_dir()}:/opt/ircu/debug:ro"
-    core_in_container = f"/opt/ircu/debug/{core.name}"
+    mount = f"{debug_output_dir()}:/opt/fishircd/debug:ro"
+    core_in_container = f"/opt/fishircd/debug/{core.name}"
     result = subprocess.run(
         [
             "docker",
@@ -133,7 +133,7 @@ def analyze_core_postmortem(core: Path, dest: Path) -> str:
             "thread apply all bt full",
             "-ex",
             "quit",
-            "/opt/ircu/bin/ircd",
+            "/opt/fishircd/bin/ircd",
             core_in_container,
         ],
         capture_output=True,
@@ -150,10 +150,10 @@ def analyze_core_postmortem(core: Path, dest: Path) -> str:
 def running_hub_containers() -> list[str]:
     """Return hub-like container names that are currently present.
 
-    Prefer tls-hub when both exist; snapshots used to hard-code ircu-hub and
+    Prefer tls-hub when both exist; snapshots used to hard-code fishircd-hub and
     silently missed TLS topology failures.
     """
-    preferred = ("ircu-tls-hub", "ircu-hub", "ircu-limits")
+    preferred = ("fishircd-tls-hub", "fishircd-hub", "fishircd-limits")
     found: list[str] = []
     for name in preferred:
         result = subprocess.run(
@@ -252,7 +252,7 @@ def snapshot_failure_artifacts(test_nodeid: str) -> Path | None:
     except PermissionError:
         # Root-owned leftover from a prior docker/sudo run: fall back under /tmp
         # so we still capture logs without poisoning the pytest session.
-        dest = Path("/tmp") / "ircu2-test-failures" / f"{safe_name}__{stamp}"
+        dest = Path("/tmp") / "fishircd-test-failures" / f"{safe_name}__{stamp}"
         dest.mkdir(parents=True, exist_ok=True)
 
     state = container_state()
@@ -418,7 +418,7 @@ def fetch_debug_log(
 ) -> str:
     """Read DEBUGMODE output from a running container.
 
-    Tries the on-disk log file first (``LPATH``, usually ``/opt/ircu/ircd.log``).
+    Tries the on-disk log file first (``LPATH``, usually ``/opt/fishircd/ircd.log``).
     Falls back to ``docker logs`` when no file is present — in the test
     containers debug is often mirrored to stderr instead of a file.
 

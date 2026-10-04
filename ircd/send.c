@@ -377,6 +377,11 @@ void send_buffer(struct Client* to, struct Client* from, struct MsgBuf* buf, int
     if (!feature_bool(FEAT_NETWORK_FEATURES)) {
       if (tctx && tctx->tok && !strcmp(tctx->tok, TOK_TAGMSG))
         return;
+    } else if (IsService(to)) {
+      /* Service servers parse P10 positionally and cannot handle @tags;
+       * strip all tags to avoid shifting fields. */
+      prefix = 0;
+      taglen = 0;
     } else {
       int invent = tctx ? tctx->s2s_needs_time : 0;
       taglen = msg_tag_format_s2s(tagbuf, sizeof(tagbuf), tags, local_time,
@@ -638,6 +643,57 @@ void sendcmdto_serv_butone(struct Client *from, const char *cmd,
     if (one && lp->value.cptr == cli_from(one))
       continue;
     send_buffer(lp->value.cptr, NULL, mb, 0, &mctx, NULL);
+  }
+
+  msgq_clean(mb);
+}
+
+/**
+ * Send a (prefixed) command to all servers matching flag arrays but one.
+ * @param[in] from Client sending the command.
+ * @param[in] cmd Long name of command (ignored).
+ * @param[in] tok Short name of command.
+ * @param[in] one Client direction to skip (or NULL).
+ * @param[in] require Array of Flag bits; server must have all to receive.
+ * @param[in] reqcount Number of entries in require (0 for none).
+ * @param[in] forbid Array of Flag bits; server must have none to receive.
+ * @param[in] forbidcount Number of entries in forbid (0 for none).
+ * @param[in] pattern Format string for command arguments.
+ */
+void sendcmdto_flagarray_serv_butone(struct Client *from, const char *cmd,
+                                     const char *tok, struct Client *one,
+                                     const int *require, int reqcount,
+                                     const int *forbid, int forbidcount,
+                                     const char *pattern, ...)
+{
+  struct VarData vd;
+  struct MsgBuf *mb;
+  struct DLink *lp;
+  struct MsgTagCtx mctx;
+  int i;
+
+  vd.vd_format = pattern; /* set up the struct VarData for %v */
+  va_start(vd.vd_args, pattern);
+
+  /* use token */
+  mb = msgq_make(&me, "%C %s %v", from, tok, &vd);
+  va_end(vd.vd_args);
+
+  msgtagctx_init(&mctx, tok);
+  /* send it to our downlinks */
+  for (lp = cli_serv(&me)->down; lp; lp = lp->next) {
+    if (one && lp->value.cptr == cli_from(one))
+      continue;
+    for (i = 0; i < reqcount; i++) {
+      if (!HasFlag(lp->value.cptr, require[i]))
+        goto skip;
+    }
+    for (i = 0; i < forbidcount; i++) {
+      if (HasFlag(lp->value.cptr, forbid[i]))
+        goto skip;
+    }
+    send_buffer(lp->value.cptr, NULL, mb, 0, &mctx, NULL);
+  skip:;
   }
 
   msgq_clean(mb);

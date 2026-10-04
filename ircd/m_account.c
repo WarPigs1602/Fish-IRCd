@@ -19,7 +19,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id$
+ * $Id: m_account.c,v 1.6 2004/12/11 05:13:46 klmitch Exp $
  */
 
 /*
@@ -82,17 +82,14 @@
 
 #include "client.h"
 #include "ircd.h"
-#include "ircd_features.h"
 #include "ircd_log.h"
 #include "ircd_reply.h"
 #include "ircd_string.h"
 #include "msg.h"
 #include "numnicks.h"
-#include "s_conf.h"
 #include "s_debug.h"
 #include "s_user.h"
 #include "send.h"
-#include "numeric.h"
 
 /* #include <assert.h> -- Now using assert in ircd_log.h */
 #include <stdlib.h>
@@ -104,16 +101,13 @@
  * parv[0] = sender prefix
  * parv[1] = numeric of client to act on
  * parv[2] = account name (12 characters or less)
- * parv[3] = account id
- * parv[4] = account flags
+ * parv[3] = account timestamp (optional)
+ * parv[4] = account id (optional, requires timestamp to be set to use)
  */
 int ms_account(struct Client* cptr, struct Client* sptr, int parc,
 	       char* parv[])
 {
   struct Client *acptr;
-  struct ConfItem *conf;
-  uint64_t acc_id = 0, acc_flags = 0;
-  int already_account;
 
   if (parc < 3)
     return need_more_params(sptr, "ACCOUNT");
@@ -122,86 +116,68 @@ int ms_account(struct Client* cptr, struct Client* sptr, int parc,
     return protocol_violation(cptr, "ACCOUNT from non-server %s",
 			      cli_name(sptr));
 
-  /* Prefer UWorld attached to the originator (works across multi-hop
-   * relays); fall back to the immediate uplink for direct links. */
-  if (!(conf = find_conf_byhost(cli_confs(sptr), cli_name(sptr), CONF_UWORLD)) &&
-      !(conf = find_conf_byhost(cli_confs(cptr), cli_name(sptr), CONF_UWORLD)))
-    return protocol_violation(cptr, "ACCOUNT from non U:lined server %s", cli_name(sptr)); /* Ignore ACCOUNT from non U:lined servers. */
-
   if (!(acptr = findNUser(parv[1])))
     return 0; /* Ignore ACCOUNT for a user that QUIT; probably crossed */
 
-  if (parc > 3)
-    acc_id = atoi(parv[3]);
+  if (IsAccount(acptr) && ((parc < 5) || (parc >= 5 && cli_user(acptr)->acc_id)))
+    return protocol_violation(cptr, "ACCOUNT for already registered user %s "
+			      "(%s -> %s)", cli_name(acptr),
+			      cli_user(acptr)->account, parv[2]);
 
-  if (parc > 4)
-    acc_flags = atoi(parv[4]);
-
-  already_account = IsAccount(acptr);
-
-  /* If the client already has an account, we do not accept changes to the
-   * account name, and we do not replace a non-zero acc_id.  A first-seen
-   * acc_id (stored value still 0) is adopted so later flag updates can
-   * relay with a complete ACCOUNT line. */
-  if (already_account) {
-    if (strcmp(cli_user(acptr)->account, parv[2]))
-      return protocol_violation(cptr, "ACCOUNT for already registered user %s "
-              "(%s -> %s)", cli_name(acptr),
-              cli_user(acptr)->account, parv[2]);
-    if (acc_id) {
-      if (cli_user(acptr)->acc_id == 0) {
-        cli_user(acptr)->acc_id = acc_id;
-        Debug((DEBUG_DEBUG, "Received account id: account \"%s\", "
-              "id %qu", parv[2], cli_user(acptr)->acc_id));
-      } else if (cli_user(acptr)->acc_id != acc_id) {
-        return protocol_violation(cptr, "ACCOUNT ID for already registered user %s "
-                "(%qu -> %qu)", cli_name(acptr),
-                cli_user(acptr)->acc_id, acc_id);
-      }
+  /* special case for current snircd release only */
+  if (parc >= 5 && cli_user(acptr)->account[0]) {
+    if (strcmp(cli_user(acptr)->account, parv[2])) {
+      return protocol_violation(cptr, "ACCOUNT change for already registered user %s "
+                                "(%s -> %s)", cli_name(acptr),
+                                cli_user(acptr)->account, parv[2]);
     }
-  } else {
-    /* Client did not already have an account. */
-    if (strlen(parv[2]) > ACCOUNTLEN)
-      return protocol_violation(cptr,
-                                "Received account (%s) longer than %d for %s; "
-                                "ignoring.",
-                                parv[2], ACCOUNTLEN, cli_name(acptr));
+    cli_user(acptr)->acc_create = atoi(parv[3]);
+    cli_user(acptr)->acc_id = strtoul(parv[4], NULL, 10);      
+    sendcmdto_serv_butone(sptr, CMD_ACCOUNT, cptr, "%C %s %Tu %lu",
+                              acptr, cli_user(acptr)->account,
+                              cli_user(acptr)->acc_create,
+                              cli_user(acptr)->acc_id);
+    return 0;
+  }
 
-    if (acc_id) {
-      cli_user(acptr)->acc_id = acc_id;
-      Debug((DEBUG_DEBUG, "Received account id: account \"%s\", "
-            "id %qu", parv[2], cli_user(acptr)->acc_id));
+  assert(0 == cli_user(acptr)->account[0]);
+
+  if (strlen(parv[2]) > ACCOUNTLEN)
+    return protocol_violation(cptr,
+                              "Received account (%s) longer than %d for %s; "
+                              "ignoring.",
+                              parv[2], ACCOUNTLEN, cli_name(acptr));
+
+  if (parc > 3) {
+    cli_user(acptr)->acc_create = atoi(parv[3]);
+    Debug((DEBUG_DEBUG, "Received timestamped account: account \"%s\", "
+           "timestamp %Tu", parv[2], cli_user(acptr)->acc_create));
+    if (parc > 4) {
+      cli_user(acptr)->acc_id = strtoul(parv[4], NULL, 10); 
+      Debug((DEBUG_DEBUG, "Received account id for account \"%s\": id %lu", parv[2], cli_user(acptr)->acc_id));
     }
+  }
 
-    ircd_strncpy(cli_user(acptr)->account, parv[2], ACCOUNTLEN);
+  ircd_strncpy(cli_user(acptr)->account, parv[2], ACCOUNTLEN);
+  /* Send to all users in common channels with account-notify capabilities */
     sendcmdto_capflag_common_channels_butone(acptr, CMD_ACCOUNT, NULL, CAP_ACCOUNTNOTIFY,
                           0, "%s", cli_user(acptr)->account);
-    hide_hostmask(acptr, FLAG_ACCOUNT);
-  }
+  
+  hide_hostmask(acptr, FLAG_ACCOUNT);
 
-  if (parc > 4) {
-    cli_user(acptr)->acc_flags = acc_flags;
-    Debug((DEBUG_DEBUG, "Received account flags: account \"%s\", "
-           "flags %qu", parv[2], cli_user(acptr)->acc_flags));
-  }
-
-  /* Flag-only / same-name ACCOUNT updates for already-authed users
-   * confuse peers on u2.10.12.19 and earlier (they protocol_violate on
-   * any second ACCOUNT).  u2.10.13.0 tolerates same-name locally; do not
-   * relay while NETWORK_FEATURES is off.  First-time ACCOUNT always
-   * propagates. */
-  if (already_account && !feature_bool(FEAT_NETWORK_FEATURES))
-    return 0;
-
-  /* Key the relay format on parc (not stored acc_id) so a flag update
-   * after a bare-name registration still propagates id/flags.  A zero
-   * flag value is intentional when parc > 4. */
-  sendcmdto_serv_butone(sptr, CMD_ACCOUNT, cptr,
-                        parc > 4 ? "%C %s %qu %qu" :
-                        parc > 3 ? "%C %s %qu" : "%C %s",
-                        acptr, cli_user(acptr)->account,
-                        cli_user(acptr)->acc_id,
-                        cli_user(acptr)->acc_flags);
+   if (cli_user(acptr)->acc_id) {
+     sendcmdto_serv_butone(sptr, CMD_ACCOUNT, cptr, "%C %s %Tu %lu",
+                           acptr, cli_user(acptr)->account,
+                           cli_user(acptr)->acc_create,
+                           cli_user(acptr)->acc_id);
+   } else if (cli_user(acptr)->acc_create) {
+     sendcmdto_serv_butone(sptr, CMD_ACCOUNT, cptr, "%C %s %Tu",
+                           acptr, cli_user(acptr)->account,
+                           cli_user(acptr)->acc_create);
+   } else {
+     sendcmdto_serv_butone(sptr, CMD_ACCOUNT, cptr, "%C %s",
+                           acptr, cli_user(acptr)->account);
+   }
 
   return 0;
 }

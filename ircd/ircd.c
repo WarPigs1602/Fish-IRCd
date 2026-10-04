@@ -63,6 +63,7 @@
 #include "uping.h"
 #include "userload.h"
 #include "version.h"
+#include "patchlevel.h"
 #include "websocket.h"
 #include "whowas.h"
 

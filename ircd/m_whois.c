@@ -146,7 +146,7 @@ static void do_whois(struct Client* sptr, struct Client *acptr, int parc)
 		   cli_info(acptr));
 
   /* Display the channels this user is on. */
-  if (!IsChannelService(acptr))
+  if ((!IsChannelService(acptr) && !IsNoChan(acptr)) || (acptr==sptr))
   {
     struct Membership* chan;
     mlen = strlen(cli_name(&me)) + strlen(cli_name(sptr)) + 12 + strlen(name);
@@ -176,20 +176,32 @@ static void do_whois(struct Client* sptr, struct Client *acptr, int parc)
           *buf = '\0';
           len = 0;
        }
-       if (IsDeaf(acptr))
-         *(buf + len++) = '-';
-       if (!ShowChannel(sptr, chptr))
-         *(buf + len++) = '*';
-       if (IsDelayedJoin(chan) && (sptr != acptr))
-         *(buf + len++) = '<';
-       else if (IsChanOp(chan))
-         *(buf + len++) = '@';
-       else if (HasVoice(chan))
-         *(buf + len++) = '+';
-       else if (IsZombie(chan))
-         *(buf + len++) = '!';
-       if (len)
-          *(buf + len) = '\0';
+        if (IsDeaf(acptr))
+          *(buf + len++) = '-';
+        if (!ShowChannel(sptr, chptr))
+          *(buf + len++) = '*';
+        /* Using of multi-prefix. */
+        if (HasCap(sptr, CAP_MULTI_PREFIX)) {
+          if (IsDelayedJoin(chan) && (sptr != acptr))
+            *(buf + len++) = '<';
+          if (IsChanOp(chan))
+            *(buf + len++) = '@';
+          if (HasVoice(chan))
+            *(buf + len++) = '+';
+          if (IsZombie(chan))
+            *(buf + len++) = '!';
+        } else {
+          if (IsDelayedJoin(chan) && (sptr != acptr))
+            *(buf + len++) = '<';
+          else if (IsChanOp(chan))
+            *(buf + len++) = '@';
+          else if (HasVoice(chan))
+            *(buf + len++) = '+';
+          else if (IsZombie(chan))
+            *(buf + len++) = '!';
+        }
+        if (len)
+           *(buf + len) = '\0';
        strcpy(buf + len, chptr->chname);
        len += strlen(chptr->chname);
        strcat(buf + len, " ");
@@ -214,7 +226,11 @@ static void do_whois(struct Client* sptr, struct Client *acptr, int parc)
           is_secure_path(acptr, sptr) ? " (secure network path)" : "");
 
     if (SeeOper(sptr,acptr))
+    {
        send_reply(sptr, RPL_WHOISOPERATOR, name);
+       if (IsAnOper(sptr) && user->opername)
+         send_reply(sptr, RPL_WHOISOPERNAME, name, user->opername);
+    }
 
     if (IsAccount(acptr))
       send_reply(sptr, RPL_WHOISACCOUNT, name, user->account);
@@ -222,6 +238,9 @@ static void do_whois(struct Client* sptr, struct Client *acptr, int parc)
     if (HasHiddenHost(acptr) && (IsAnOper(sptr) || acptr == sptr))
       send_reply(sptr, RPL_WHOISACTUALLY, name, user->username,
                  user->realhost, ircd_ntoa(&cli_ip(acptr)));
+
+    if (!IsAnOper(sptr) && IsParanoid(acptr) && IsAnOper(acptr))
+      sendcmdto_one(&me, CMD_NOTICE, acptr, "%C :whois: %s performed a /WHOIS on you.", acptr, cli_name(sptr));
 
     /* Hint: if your looking to add more flags to a user, eg +h, here's
      *       probably a good place to add them :)

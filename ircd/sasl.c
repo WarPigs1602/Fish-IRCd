@@ -29,8 +29,11 @@
 #include "ircd_events.h"
 #include "ircd_log.h"
 #include "ircd_string.h"
+#include "ircd_snprintf.h"
 #include "ircd_reply.h"
 #include "ircd_netconf.h"
+#include "ircd_features.h"
+#include "hash.h"
 #include "send.h"
 #include "msg.h"
 #include "capab.h"
@@ -39,7 +42,10 @@
 #include "s_debug.h"
 #include "s_bsd.h"
 #include "numeric.h"
+#include "s_user.h"
 
+#include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 
 /*** SASL session hash table for cookie->client mapping
@@ -47,7 +53,7 @@
  * This table maps SASL session cookies (unsigned long) to client pointers.
  * It is used to efficiently look up a client by its SASL cookie during authentication.
  *
- * The table uses separate chaining for collision resolution and is fixed at 1024 buckets.
+ * The table uses separate chaining for collision resolution and is fixed at 256 buckets.
  * Only used internally to sasl.c.
  */
 #define SASL_HASH_SIZE 256
@@ -56,6 +62,8 @@
 struct SaslSessionEntry {
   unsigned long cookie;              /**< SASL session cookie (key) */
   struct Client* client;             /**< Pointer to associated client */
+  char target[64];                   /**< Stable native SASL destination */
+  char host[HOSTLEN + 1];            /**< Host sent in the original request */
   struct SaslSessionEntry* next;     /**< Next entry in the bucket (chaining) */
 };
 
@@ -71,14 +79,20 @@ static struct SaslSessionEntry* sasl_session_table[SASL_HASH_SIZE];
 /** Global SASL statistics */
 static struct SaslStats sasl_statistics = { 0, 0 };
 
-/** Check if SASL is available
- * @return 1 if SASL server is configured, 0 otherwise
- */
+/** Network configuration overrides the local snircd-style feature. */
+const char* sasl_server(void)
+{
+  const char* server = netconf_str(NETCONF_SASL_SERVER);
+  const char* fallback = feature_str(FEAT_SASL_SERVER);
+
+  return *server ? server : fallback ? fallback : "";
+}
+
+/** Check if SASL is available. */
 int sasl_available(void)
 {
-  if (!*netconf_str(NETCONF_SASL_SERVER)
-      || !*netconf_str(NETCONF_SASL_MECHANISMS)
-      || !find_match_server((char*)netconf_str(NETCONF_SASL_SERVER)))
+  if (!*sasl_server()
+      || !find_match_server((char*)sasl_server()))
     return 0;
 
   return 1;
@@ -126,6 +140,10 @@ static int mechanism_in_list(const char* mechanism, const char* mechanism_list)
  */
 int sasl_mechanism_supported(const char* mechanism)
 {
+  /* A service configured through SASL_SERVER may publish no mechanism list.
+   * In that case services validates the requested mechanism itself. */
+  if (!*netconf_str(NETCONF_SASL_MECHANISMS))
+    return 1;
   return mechanism_in_list(mechanism, netconf_str(NETCONF_SASL_MECHANISMS));
 }
 
@@ -145,12 +163,13 @@ void sasl_check_capability(void)
  */
 static void sasl_config_callback(const char *key, const char *old_value, const char *new_value)
 {
-  Debug((DEBUG_DEBUG, "SASL config changed: %s = %s (was: %s)", 
-         key, new_value, old_value ? old_value : "(unset)"));
+  Debug((DEBUG_DEBUG, "SASL config changed: %s = %s (was: %s)",
+         key, new_value ? new_value : "(unset)",
+         old_value ? old_value : "(unset)"));
   
   /* Update SASL capability value if mechanisms changed */
   if (ircd_strcmp(key, "sasl.mechanisms") == 0) {
-    cap_set_value(E_CAP_SASL, new_value);
+    cap_set_value(E_CAP_SASL, new_value ? new_value : "");
   }
   
   /* Update SASL capability availability */
@@ -173,11 +192,21 @@ static unsigned int sasl_cookie_hash(unsigned long cookie) {
  * @param client Pointer to associated client
  */
 void sasl_session_add(unsigned long cookie, struct Client* client) {
+  struct Client* server;
   if (!cookie || !client) return;
   unsigned int idx = sasl_cookie_hash(cookie);
   struct SaslSessionEntry* entry = (struct SaslSessionEntry*)MyMalloc(sizeof(struct SaslSessionEntry));
   entry->cookie = cookie;
   entry->client = client;
+  server = *sasl_server() ? find_match_server((char*)sasl_server()) : NULL;
+  if (*cli_name(client) && (IsUser(client) || (server && MyConnect(server))))
+    ircd_strncpy(entry->target, cli_name(client), sizeof(entry->target) - 1);
+  else
+    ircd_snprintf(0, entry->target, sizeof(entry->target), "%s.%lu",
+                  cli_yxx(&me), cookie);
+  ircd_strncpy(entry->host,
+               cli_user(client) && *cli_user(client)->host ?
+               cli_user(client)->host : cli_sock_ip(client), HOSTLEN);
   entry->next = sasl_session_table[idx];
   sasl_session_table[idx] = entry;
 }
@@ -203,93 +232,210 @@ void sasl_session_remove(unsigned long cookie) {
  * @param cookie SASL session cookie to look up
  * @return Pointer to associated client, or NULL if not found
  */
-struct Client* find_sasl_client(unsigned long cookie) {
-  if (!cookie) return NULL;
-  unsigned int idx = sasl_cookie_hash(cookie);
-  struct SaslSessionEntry* entry = sasl_session_table[idx];
+static struct SaslSessionEntry* sasl_session_find(unsigned long cookie)
+{
+  struct SaslSessionEntry* entry;
+
+  if (!cookie)
+    return NULL;
+  entry = sasl_session_table[sasl_cookie_hash(cookie)];
   while (entry) {
     if (entry->cookie == cookie)
-      return entry->client;
+      return entry;
     entry = entry->next;
   }
   return NULL;
 }
 
-/** Handle SASL extension reply from authentication server
- * @param[in] sptr Server that sent the reply
- * @param[in] routing Routing information (should be SASL cookie)
- * @param[in] reply The SASL reply message
- */
-void sasl_send_xreply(struct Client* sptr, const char* routing, const char* reply)
+struct Client* find_sasl_client(unsigned long cookie)
 {
-  struct Client* cli;
-  unsigned long cookie;
-  
-  if (!routing || !reply)
-    return;
-    
-  /* Parse the routing information to get the SASL cookie */
-  cookie = strtoul(routing, NULL, 10);
-  if (!cookie) {
-    Debug((DEBUG_DEBUG, "sasl_send_xreply: Invalid cookie in routing '%s'", routing));
-    return;
-  }
-  
-  /* Find the client with this SASL cookie */
-  cli = find_sasl_client(cookie);
-  if (!cli) {
-    Debug((DEBUG_DEBUG, "sasl_send_xreply: No client found for SASL cookie %lu", cookie));
-    sasl_session_remove(cookie);
-    return;
-  }
-  
-  if (reply[0] == 'O' && reply[1] == 'K'
-               && (reply[2] == '\0' || reply[2] == ' ')) {
-    
-    /* Skip "OK "; a bare "OK" reply carries no account information. */
-    const char *account_info = (reply[2] == ' ') ? reply + 3 : "";
+  struct SaslSessionEntry* entry = sasl_session_find(cookie);
+  return entry ? entry->client : NULL;
+}
 
-    /**
-     * We only parse this information if the user is not yet registered (i.e. SASL authentication during auth).
-     * If this is a SASL authentication after registration, the username will be set by the service using AC.
-     */
-    if (!IsUser(cli)) {
-      auth_set_account(cli_auth(cli), account_info);
+/** Return the destination chosen when the exchange was started. */
+const char* sasl_session_target(unsigned long cookie)
+{
+  struct SaslSessionEntry* entry = sasl_session_find(cookie);
+  return entry ? entry->target : NULL;
+}
 
-    /**
-     * For already registered users, we send RPL_LOGGEDIN. For non-registered users,
-     * we send RPL_LOGGEDIN in check_auth_finished().
-     */
-    } else {
-      send_reply(cli, RPL_LOGGEDIN,
-        cli_name(cli), cli_user(cli)->username,
-        cli_user(cli)->host, cli_user(cli)->account,
-        cli_user(cli)->account);
+const char* sasl_session_host(unsigned long cookie)
+{
+  struct SaslSessionEntry* entry = sasl_session_find(cookie);
+  return entry ? entry->host : NULL;
+}
+
+/** Tell the configured service that a local exchange is no longer active. */
+void sasl_send_abort(struct Client* cptr)
+{
+  struct Client* server;
+  const char* target;
+
+  if (!cli_sasl(cptr) || !*sasl_server()
+      || !(target = sasl_session_target((unsigned long)cli_sasl(cptr))))
+    return;
+  server = find_match_server((char*)sasl_server());
+  if (server)
+    sendcmdto_one(&me, CMD_AUTHENTICATE, server, "%s %s *", target,
+                  sasl_session_host((unsigned long)cli_sasl(cptr)));
+}
+
+/** Relay native SASL requests and deliver replies to their home server. */
+int ms_sasl(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
+{
+  struct Client *server, *home, *cli;
+  const char *target, *text;
+  char *end;
+  unsigned long cookie, created, id;
+  int cookie_target;
+  char account_info[ACCOUNTLEN + 64];
+
+  if (parc < 4 || !IsServer(sptr))
+    return 0;
+
+  server = *sasl_server() ? find_match_server((char*)sasl_server()) : NULL;
+  if (!server)
+    return 0;
+
+  target = parv[1];
+  text = parv[3];
+  if (!*target || !*parv[2] || !*text || strlen(text) > 400)
+    return 0;
+
+  /* A local unregistered nick is usable when services is directly linked;
+   * otherwise pre-registration requires a routable server-scoped cookie. */
+  cookie_target = strlen(target) >= 4 && target[2] == '.'
+      && strchr("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789[]", target[0])
+      && strchr("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789[]", target[1])
+      && target[3] >= '0' && target[3] <= '9';
+  if (cookie_target) {
+    errno = 0;
+    cookie = strtoul(target + 3, &end, 10);
+    if (errno || !cookie || *end)
+      return 0;
+    home = FindNServer(target);
+  } else {
+    cli = FindClient(target);
+    home = cli && MyConnect(cli) ? &me :
+           cli && IsUser(cli) ? cli_user(cli)->server : NULL;
+  }
+  /* Never flood a credential to discover its destination. */
+  if (!home)
+    return 0;
+
+  if (sptr != server) {
+    /* A request is server-sourced and belongs to its originating server.
+     * Do not relay arbitrary users' credentials or a forged service reply. */
+    if (parc != 4 || home != sptr || IsMe(server))
+      return 0;
+    sendcmdto_one(sptr, CMD_AUTHENTICATE, server, "%s %s %s",
+                  target, parv[2], text);
+    return 0;
+  }
+
+  if (!IsMe(home)) {
+    if (!ircd_strcmp(text, "S")) {
+      if (parc != 7)
+        return 0;
+      sendcmdto_one(sptr, CMD_AUTHENTICATE, home, "%s %s S %s %s %s",
+                    target, parv[2], parv[4], parv[5], parv[6]);
+    } else if (!ircd_strcmp(text, "M")) {
+      if (parc != 5)
+        return 0;
+      sendcmdto_one(sptr, CMD_AUTHENTICATE, home, "%s %s M :%s",
+                    target, parv[2], parv[4]);
+    } else if (parc == 4) {
+      sendcmdto_one(sptr, CMD_AUTHENTICATE, home, "%s %s %s",
+                    target, parv[2], text);
     }
+    return 0;
+  }
 
+  if (cookie_target) {
+    cli = find_sasl_client(cookie);
+  } else {
+    cli = FindClient(target);
+    cookie = cli && MyConnect(cli) ? (unsigned long)cli_sasl(cli) : 0;
+  }
+  if (!cli || !cookie || !MyConnect(cli) || cli_sasl(cli) != cookie
+      || !sasl_session_target(cookie)
+      || ircd_strcmp(sasl_session_target(cookie), target)
+      || !CapHas(cli_active(cli), CAP_SASL)
+      || (IsUser(cli) && HasFlag(cli, FLAG_ACCOUNT)))
+    return 0;
+
+  if (!ircd_strcmp(text, "S")) {
+    if (parc != 7 || !*parv[4] || strlen(parv[4]) > ACCOUNTLEN
+        || strpbrk(parv[4], " :") != NULL)
+      goto invalid_success;
+    errno = 0;
+    created = strtoul(parv[5], &end, 10);
+    if (errno || parv[5][0] < '0' || parv[5][0] > '9'
+        || end == parv[5] || *end || (time_t)created < 0
+        || (uint64_t)(time_t)created != created)
+      goto invalid_success;
+    errno = 0;
+    id = strtoul(parv[6], &end, 10);
+    if (errno || parv[6][0] < '0' || parv[6][0] > '9'
+        || end == parv[6] || *end)
+      goto invalid_success;
+
+    if (!IsUser(cli)) {
+      if (!cli_auth(cli))
+        goto invalid_success;
+      ircd_snprintf(0, account_info, sizeof(account_info), "%s:%lu:%lu",
+                    parv[4], created, id);
+      if (auth_set_account(cli_auth(cli), account_info))
+        goto invalid_success;
+    } else {
+      ircd_strncpy(cli_user(cli)->account, parv[4], ACCOUNTLEN);
+      cli_user(cli)->acc_create = created;
+      cli_user(cli)->acc_id = id;
+      sendcmdto_capflag_common_channels_butone(cli, CMD_ACCOUNT, NULL,
+                                                CAP_ACCOUNTNOTIFY, 0, "%s", parv[4]);
+      hide_hostmask(cli, FLAG_ACCOUNT);
+      sendcmdto_serv_butone(&me, CMD_ACCOUNT, NULL, "%C %s %Tu %lu",
+                            cli, parv[4], (time_t)cli_user(cli)->acc_create,
+                            (unsigned long)cli_user(cli)->acc_id);
+      send_reply(cli, RPL_LOGGEDIN, cli_name(cli), cli_user(cli)->username,
+                 cli_user(cli)->host, parv[4], parv[4]);
+    }
     sasl_stop_timeout(cli);
     sasl_session_remove(cookie);
     cli_sasl(cli) = 0;
     SetFlag(cli, FLAG_SASL);
-
     send_reply(cli, RPL_SASLSUCCESS);
     sasl_statistics.auth_success++;
-  } else if (0 == ircd_strncmp(reply, "NO ", 3)) {
-    /* Authentication failed, send failure message to client */
-    send_reply(cli, ERR_SASLFAIL, reply + 3);
-    
-    /* Stop SASL timeout timer and clear session */
+  } else if (!ircd_strcmp(text, "F") || !ircd_strcmp(text, "*")) {
     sasl_stop_timeout(cli);
     sasl_session_remove(cookie);
     cli_sasl(cli) = 0;
-    
-    /* Increment failed authentication counter */
-    sasl_statistics.auth_failed++;
-
-  } else if (0 == ircd_strncmp(reply, "SASL ", 5)) {
-    /* Send the AUTHENTICATE reply to the client */
-    sendcmdto_one(&me, CMD_AUTHENTICATE, cli, "%s", reply + 5);
+    if (*text == '*')
+      send_reply(cli, ERR_SASLABORTED);
+    else {
+      send_reply(cli, ERR_SASLFAIL, "SASL authentication failed");
+      sasl_statistics.auth_failed++;
+    }
+  } else if (!ircd_strcmp(text, "M")) {
+    if (parc != 5)
+      return 0;
+    send_reply(cli, RPL_SASLMECHS, parv[4]);
+    sasl_stop_timeout(cli);
+    sasl_session_remove(cookie);
+    cli_sasl(cli) = 0;
+  } else if (parc == 4) {
+    sendcmdto_one(&me, CMD_AUTHENTICATE, cli, "%s", text);
   }
+  return 0;
+
+invalid_success:
+  sasl_stop_timeout(cli);
+  sasl_session_remove(cookie);
+  cli_sasl(cli) = 0;
+  send_reply(cli, ERR_SASLFAIL, "Invalid authentication response");
+  sasl_statistics.auth_failed++;
+  return 0;
 }
 
 /** Stop the SASL timeout timer for a client
@@ -320,7 +466,7 @@ void sasl_stats(struct Client* sptr, const struct StatDesc* sd, char* param)
 {
   if (sasl_available()) {
     send_reply(sptr, SND_EXPLICIT | RPL_STATSDEBUG,
-               ":SASL server: %s", netconf_str(NETCONF_SASL_SERVER));
+               ":SASL server: %s", sasl_server());
     send_reply(sptr, SND_EXPLICIT | RPL_STATSDEBUG,
                ":SASL mechanisms: %s", netconf_str(NETCONF_SASL_MECHANISMS));
     send_reply(sptr, SND_EXPLICIT | RPL_STATSDEBUG,

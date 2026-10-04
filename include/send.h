@@ -61,6 +61,13 @@ extern void sendcmdto_flag_serv_butone(struct Client *from, const char *cmd,
                                        int require, int forbid,
                                        const char *pattern, ...);
 
+/* Send command to servers by flag arrays except one */
+extern void sendcmdto_flagarray_serv_butone(struct Client *from, const char *cmd,
+                                            const char *tok, struct Client *one,
+                                            const int *require, int reqcount,
+                                            const int *forbid, int forbidcount,
+                                            const char *pattern, ...);
+
 /* Send command to all servers except one */
 extern void sendcmdto_serv_butone(struct Client *from, const char *cmd,
 				  const char *tok, struct Client *one,

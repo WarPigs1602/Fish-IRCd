@@ -73,7 +73,7 @@ extern void         user_count_memory(size_t* count_out, size_t* bytes_out);
 extern int set_nick_name(struct Client* cptr, struct Client* sptr,
                          const char* nick, int parc, char* parv[]);
 extern void send_umode_out(struct Client* cptr, struct Client* sptr,
-                          struct Flags* old, int prop);
+                           struct Flags* old, int prop);
 extern int whisper(struct Client* source, const char* nick,
                    const char* channel, const char* text, int is_notice);
 extern void send_user_info(struct Client* to, char* names, int rpl,
@@ -81,6 +81,8 @@ extern void send_user_info(struct Client* to, char* names, int rpl,
 
 extern int hide_hostmask(struct Client *cptr, unsigned int flags);
 extern const char *visible_username(const struct Client *cptr);
+extern int set_hostmask(struct Client *cptr, char *hostmask, char *password);
+extern int is_hostmask(char *word);
 extern int set_user_mode(struct Client *cptr, struct Client *sptr,
                          int parc, char *parv[], int allow_modes);
 extern int is_silenced(struct Client *sptr, struct Client *acptr);
@@ -93,9 +95,9 @@ extern int hunt_server_prio_cmd(struct Client *from, const char *cmd,
 				int MustBeOper, const char *pattern,
 				int server, int parc, char *parv[]);
 extern struct Client* next_client(struct Client* next, const char* ch);
-extern char *umode_str(struct Client *cptr);
+extern char *umode_str(struct Client *cptr, int opernames);
 extern void send_umode(struct Client *cptr, struct Client *sptr,
-                       struct Flags *old, int sendset);
+                       struct Flags *old, int sendset, int opernames);
 extern void set_snomask(struct Client *, unsigned int, int);
 extern int is_snomask(char *);
 extern int check_target_limit(struct Client *sptr, struct Client *acptr,

@@ -126,8 +126,10 @@ do_clearmode(struct Client *cptr, struct Client *sptr, struct Channel *chptr,
     MODE_DELJOINS,      'D',
     MODE_NOCOLOR,       'c',
     MODE_NOCTCP,        'C',
+    MODE_NONOTICE,      'N',
     MODE_NOPARTMSGS,    'u',
     MODE_MODERATENOREG, 'M',
+    MODE_NOMULTITARGET, 'T',
     MODE_TLSONLY,       'Z',
     0x0, 0x0
   };

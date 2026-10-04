@@ -18,7 +18,7 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 /** @file
- * @brief Signal handlers for ircu.
+ * @brief Signal handlers for Fish-IRCd.
  * @version $Id$
  */
 #include "config.h"

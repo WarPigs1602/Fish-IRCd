@@ -163,6 +163,7 @@ static struct LogDesc {
   S(RESOLVER, -1, 0),
   S(SOCKET, -1, 0),
   S(IAUTH, -1, SNO_NETWORK),
+  S(SETHOST, -1, SNO_OLDSNO),
   S(DEBUG, -1, SNO_DEBUG),
 #undef S
   { LS_LAST_SYSTEM, 0, 0, -1, 0, -1, 0 }

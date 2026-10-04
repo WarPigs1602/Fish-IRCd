@@ -36,14 +36,14 @@ _WS_KEY = "dGhlIHNhbXBsZSBub25jZQ=="
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HUB_CONF_HOST = REPO_ROOT / "tests" / "docker" / "ircd-hub.conf"
-HUB_CONTAINER = "ircu-hub"
-HUB_CONF_CONTAINER = "/opt/ircu/lib/ircd.conf"
+HUB_CONTAINER = "fishircd-hub"
+HUB_CONF_CONTAINER = "/opt/fishircd/lib/ircd.conf"
 
 # Exact lines from tests/docker/ircd-hub.conf (DoIdentLookups + tilde harness).
 _IDENT_CLIENT_LINE = (
     'Client { ip = "*"; class = "Local"; username = "ident"; maxlinks = 50; };\n'
 )
-_IAUTH_TILDED_LINE = 'IAuth { program = "/opt/ircu/bin/iauth-tilded.pl"; };\n'
+_IAUTH_TILDED_LINE = 'IAuth { program = "/opt/fishircd/bin/iauth-tilded.pl"; };\n'
 
 
 def _raw_ws_handshake(*extra_header_lines: bytes) -> bytes:
@@ -386,8 +386,8 @@ def _sighup_hub_ircd() -> None:
             "sh",
             "-c",
             # Prefer the real ircd binary; fall back to pgrep -f.
-            "pid=$(pidof /opt/ircu/bin/ircd 2>/dev/null || pidof ircd 2>/dev/null || "
-            "pgrep -n -f /opt/ircu/bin/ircd || true); "
+            "pid=$(pidof /opt/fishircd/bin/ircd 2>/dev/null || pidof ircd 2>/dev/null || "
+            "pgrep -n -f /opt/fishircd/bin/ircd || true); "
             '[ -n "$pid" ] && kill -HUP "$pid"',
         ],
         check=False,

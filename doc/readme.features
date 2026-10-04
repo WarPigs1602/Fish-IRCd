@@ -278,6 +278,31 @@ silence) match those two complete identities only (~user@realhost and
 user@account.hiddenhost), not mixed forms such as user@realhost.
 G-lines continue to match only the real tilded username and real host.
 
+SETHOST
+ * Type: boolean
+ * Default: FALSE
+
+This selects whether the /SETHOST command and user mode +h are
+enabled at all.  When disabled, local users get an error if they
+try to use /SETHOST.
+
+SETHOST_USER
+ * Type: boolean
+ * Default: FALSE
+
+This selects whether plain (non-oper) users may use /SETHOST to
+activate a spoofhost configured with a S:line (spoofhost block).
+Operators may always use /SETHOST when SETHOST is enabled.
+
+SETHOST_AUTO
+ * Type: boolean
+ * Default: FALSE
+
+When enabled, the server automatically activates a matching
+spoofhost S:line for a connecting user, based on the user's real
+username and host (or IP address).  The user receives numeric 399
+(RPL_USINGSLINE) and mode +h at sign-on.
+
 CONNEXIT_NOTICES
  * Type: boolean
  * Default: FALSE

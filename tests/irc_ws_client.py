@@ -1,4 +1,4 @@
-"""Minimal async IRC WebSocket client for testing ircu2."""
+"""Minimal async IRC WebSocket client for testing Fish-IRCd."""
 
 import asyncio
 import logging

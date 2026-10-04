@@ -93,10 +93,25 @@ struct ConfItem
 /** Channel quarantine structure. */
 struct qline
 {
-  struct qline *next; /**< Next qline in #GlobalQuarantineList. */
+  struct qline *next; /**< Next qline in #GlobalQuarantineList */
   char *chname;       /**< Quarantined channel name. */
   char *reason;       /**< Reason for quarantine. */
 };
+
+/** Spoofhost S-line structure for the sethost feature. */
+struct sline {
+  struct sline *next;
+  char *spoofhost;
+  char *passwd;
+  char *realhost;
+  char *username;
+  struct irc_in_addr address;
+  unsigned int flags;
+  char bits; /* Number of bits for CIDR match on realhost */
+};
+
+#define SLINE_FLAGS_HOSTNAME 0x0001 /* S-line by hostname */
+#define SLINE_FLAGS_IP       0x0002 /* S-line by IP address/CIDR */
 
 /** Webirc authorization structure. */
 struct wline
@@ -188,6 +203,7 @@ extern int              GlobalConfCount;
 extern struct s_map*    GlobalServiceMapList;
 extern struct qline*    GlobalQuarantineList;
 extern struct wline*    GlobalWebircList;
+extern struct sline*    GlobalSList;
 extern int              DoIdentLookups;
 
 /*
@@ -220,6 +236,9 @@ extern void lookup_confhost(struct ConfItem *aconf);
 extern void conf_parse_userhost(struct ConfItem *aconf, char *host);
 extern struct ConfItem *conf_debug_iline(const char *client);
 extern void free_mapping(struct s_map *smap);
+extern void clear_slines(void);
+extern int conf_check_slines(struct Client *cptr);
+extern void free_spoofhost(struct sline *spoof);
 
 extern void yyerror(const char *msg);
 

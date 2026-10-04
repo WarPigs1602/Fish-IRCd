@@ -168,8 +168,8 @@ int m_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
     }
 
     /* BADCHANed channel */
-    if ((gline = gline_find(name, GLINE_BADCHAN | GLINE_EXACT)) &&
-	GlineIsActive(gline) && !IsAnOper(sptr)) {
+    if (!IsAnOper(sptr)
+        && (gline = gline_lookup_badchan(name, GLINE_BADCHAN | GLINE_EXACT))) {
       send_reply(sptr, ERR_BANNEDFROMCHAN, name);
       continue;
     }
@@ -225,6 +225,14 @@ int m_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
         err = ERR_BADCHANNELKEY;
       else if ((chptr->mode.mode & MODE_TLSONLY) && !IsTLS(sptr))
         err = ERR_TLSONLYCHAN;
+
+      /*
+       * ASUKA_X:
+       * Allow XtraOpers to join all channels.
+       * --Bigfoot
+       */
+      if (IsXtraOp(sptr))
+        err = 0;
 
       /* An oper with WALK_LCHAN privilege can join a local channel
        * he otherwise could not join by using "OVERRIDE" as the key.

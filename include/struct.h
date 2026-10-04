@@ -85,11 +85,13 @@ struct User {
    * overwritten with the ident response.
    */
   char               username[USERLEN + 1];
+  char               realusername[USERLEN + 1]; /**< actual username */
   char               host[HOSTLEN + 1];       /**< displayed hostname */
   char               realhost[HOSTLEN + 1];   /**< actual hostname */
   char               account[ACCOUNTLEN + 1]; /**< IRC account name */
   uint64_t	     acc_id;                  /**< IRC account id */
-  uint64_t           acc_flags;               /**< IRC account flags */
+  uint64_t           acc_create;               /**< IRC account timestamp */
+  char*              opername;                 /**< IRC Opername */
 };
 
 #endif /* INCLUDED_struct_h */

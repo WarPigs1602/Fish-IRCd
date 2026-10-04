@@ -167,12 +167,22 @@ void do_names(struct Client* sptr, struct Channel* chptr, int filter)
     if (needs_space)
       buf[idx++] = ' ';
     needs_space=1;
-    if (IsZombie(member))
-      buf[idx++] = '!';
-    else if (IsChanOp(member))
-      buf[idx++] = '@';
-    else if (HasVoice(member))
-      buf[idx++] = '+';
+    /* Using of multi-prefix. */
+    if (HasCap(sptr, CAP_MULTI_PREFIX)) {
+      if (IsZombie(member))
+        buf[idx++] = '!';
+      if (IsChanOp(member))
+        buf[idx++] = '@';
+      if (HasVoice(member))
+        buf[idx++] = '+';
+    } else {
+      if (IsZombie(member))
+        buf[idx++] = '!';
+      else if (IsChanOp(member))
+        buf[idx++] = '@';
+      else if (HasVoice(member))
+        buf[idx++] = '+';
+    }
     strcpy(buf + idx, cli_name(c2ptr));
     idx += strlen(cli_name(c2ptr));
 

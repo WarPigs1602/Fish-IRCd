@@ -8,7 +8,7 @@
  * any later version.
  */
 /** @file
- * @brief SHA-1 implementation for ircu.
+ * @brief SHA-1 implementation for Fish-IRCd.
  *
  * SHA-1 core by Steve Reid / OpenBSD, public domain.
  */

@@ -118,13 +118,15 @@ struct Client;
 #define MODE_MODERATENOREG 0x1000000    /**< +M Moderate unauthed users */
 #define MODE_TLSONLY       0x2000000    /**< +Z TLS users only */
 #define MODE_TLSINSECURE   0x4000000    /**< +z TLS insecure network path */
+#define MODE_NONOTICE      0x8000000    /**< +N No channel notices */
+#define MODE_NOMULTITARGET 0x10000000   /**< +T No multiple targets */
 
 /** mode flags which take another parameter (With PARAmeterS)
  */
 #define MODE_WPARAS     (MODE_CHANOP|MODE_VOICE|MODE_BAN|MODE_KEY|MODE_LIMIT|MODE_APASS|MODE_UPASS)
 
 /** Available Channel modes */
-#define infochanmodes feature_bool(FEAT_OPLEVELS) ? "AbiklmnopstUvrDdRcCuMZz" : "biklmnopstvrDdRcCuMZz"
+#define infochanmodes feature_bool(FEAT_OPLEVELS) ? "AbiklmnopstUvrDdRcCuNMZzT" : "biklmnopstvrDdRcCuNMZzT"
 /** Available Channel modes that take parameters */
 #define infochanmodeswithparams feature_bool(FEAT_OPLEVELS) ? "AbkloUv" : "bklov"
 

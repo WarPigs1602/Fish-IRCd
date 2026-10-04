@@ -451,6 +451,7 @@ struct Ban *find_ban(struct Client *cptr, struct Ban *banlist)
   char        iphost[SOCKIPLEN + 1];
   char       *hostmask;
   char       *sr;
+  char       *sa;
   const char *vis_user;
   struct Ban *found;
 
@@ -464,16 +465,21 @@ struct Ban *find_ban(struct Client *cptr, struct Ban *banlist)
   else
     nuh_vis[0] = '\0';
   ircd_ntoa_r(iphost, &cli_ip(cptr));
-  if (!IsAccount(cptr))
-    sr = NULL;
-  else if (HasHiddenHost(cptr))
+
+  /* user has a hiddenhost (+rx) or has a sethost (+h) - check realhost */
+  if (HasHiddenHost(cptr) || IsSetHost(cptr))
     sr = cli_user(cptr)->realhost;
   else
-  {
+    sr = NULL;
+
+  /* user has an account (+r),
+   *   but does not have a hiddenhost (-x) or has a sethost (+h) - check account host */
+  if (IsAccount(cptr) && (!IsHiddenHost(cptr) || IsSetHost(cptr))) {
     ircd_snprintf(0, tmphost, HOSTLEN, "%s.%s",
                   cli_user(cptr)->account, feature_str(FEAT_HIDDEN_HOST));
-    sr = tmphost;
-  }
+    sa = tmphost;
+  } else
+    sa = NULL;
 
   /* Walk through ban list. */
   for (found = NULL; banlist; banlist = banlist->next) {
@@ -494,9 +500,10 @@ struct Ban *find_ban(struct Client *cptr, struct Ban *banlist)
         continue;
     } else if (!((banlist->flags & BAN_IPMASK)
                  && ipmask_check(&cli_ip(cptr), &banlist->address, banlist->addrbits))
-               && match(hostmask, cli_user(cptr)->host)
-               && match(hostmask, iphost)
-               && !(sr && !match(hostmask, sr))) {
+                && match(hostmask, cli_user(cptr)->host)
+                && match(hostmask, iphost)
+                && !(sr && !match(hostmask, sr))
+                && !(sa && !match(hostmask, sa))) {
       continue;
     }
     /* If an exception matches, no ban can match. */
@@ -840,7 +847,7 @@ int client_can_send_to_channel(struct Client *cptr, struct Channel *chptr, int r
   assert(0 != cptr);
 
   /* Servers can always speak on channels. */
-  if (IsServer(cptr))
+  if (IsServer(cptr) || IsXtraOp(cptr))
     return 1;
 
   /* If you are on the channel, use the function for that. */
@@ -940,10 +947,14 @@ void channel_modes(struct Client *cptr, char *mbuf, char *pbuf, int buflen,
     *mbuf++ = 'c';
   if (chptr->mode.mode & MODE_NOCTCP)
     *mbuf++ = 'C';
+  if (chptr->mode.mode & MODE_NONOTICE)
+    *mbuf++ = 'N';
   if (chptr->mode.mode & MODE_NOPARTMSGS)
     *mbuf++ = 'u';
   if (chptr->mode.mode & MODE_MODERATENOREG)
     *mbuf++ = 'M';
+  if (chptr->mode.mode & MODE_NOMULTITARGET)
+    *mbuf++ = 'T';
   if (MyUser(cptr) && (chptr->mode.mode & MODE_TLSINSECURE))
     *mbuf++ = 'z';
   else if (chptr->mode.mode & MODE_TLSONLY)
@@ -1646,8 +1657,10 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
     MODE_REGISTERED,	'R',
     MODE_NOCOLOR,       'c',
     MODE_NOCTCP,        'C',
+    MODE_NONOTICE,      'N',
     MODE_NOPARTMSGS,    'u',
     MODE_MODERATENOREG, 'M',
+    MODE_NOMULTITARGET, 'T',
     MODE_TLSONLY,       'Z',
 /*  MODE_KEY,		'k', */
 /*  MODE_BAN,		'b', */
@@ -2126,7 +2139,7 @@ modebuf_mode(struct ModeBuf *mbuf, unsigned int mode)
 
   mode &= (MODE_ADD | MODE_DEL | MODE_PRIVATE | MODE_SECRET | MODE_MODERATED |
 	   MODE_TOPICLIMIT | MODE_INVITEONLY | MODE_NOPRIVMSGS | MODE_REGONLY |
-	   MODE_NOCOLOR | MODE_NOCTCP | MODE_NOPARTMSGS | MODE_MODERATENOREG | MODE_TLSONLY |
+	   MODE_NOCOLOR | MODE_NOCTCP | MODE_NONOTICE | MODE_NOPARTMSGS | MODE_MODERATENOREG | MODE_NOMULTITARGET | MODE_TLSONLY |
 	   MODE_TLSINSECURE | MODE_DELJOINS | MODE_WASDELJOINS | MODE_REGISTERED);
 
   if (!(mode & ~(MODE_ADD | MODE_DEL))) /* don't add empty modes... */
@@ -2262,8 +2275,10 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
     MODE_DELJOINS,      'D',
     MODE_NOCOLOR,       'c',
     MODE_NOCTCP,        'C',
+    MODE_NONOTICE,      'N',
     MODE_NOPARTMSGS,    'u',
     MODE_MODERATENOREG, 'M',
+    MODE_NOMULTITARGET, 'T',
     MODE_TLSONLY,       'Z',
     0x0, 0x0
   };
@@ -3241,7 +3256,7 @@ mode_process_clients(struct ParseState *state)
     if ((state->cli_change[i].flag & (MODE_DEL | MODE_CHANOP)) ==
 	(MODE_DEL | MODE_CHANOP)) {
       /* prevent +k users from being deopped */
-      if (IsChannelService(state->cli_change[i].client)) {
+      if ((IsChannelService(state->cli_change[i].client) && IsService(cli_user(state->cli_change[i].client)->server)) || (IsChannelService(state->cli_change[i].client) && !IsXtraOp(state->sptr))) {
 	if (state->flags & MODE_PARSE_FORCE) /* it was forced */
 	  sendto_opmask_butone(0, SNO_HACK4, "Deop of +k user on %H by %s",
 			       state->chptr,
@@ -3408,8 +3423,10 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
     MODE_DELJOINS,      'D',
     MODE_NOCOLOR,       'c',
     MODE_NOCTCP,        'C',
+    MODE_NONOTICE,      'N',
     MODE_NOPARTMSGS,    'u',
     MODE_MODERATENOREG, 'M',
+    MODE_NOMULTITARGET, 'T',
     MODE_TLSONLY,       'Z',
     MODE_ADD,		'+',
     MODE_DEL,		'-',

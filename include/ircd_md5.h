@@ -14,7 +14,7 @@
  * ircuified 2002 by hikari
  */
 /** @file
- * @brief MD5 implementation for ircu.
+ * @brief MD5 implementation for Fish-IRCd.
  * @version $Id$
  */
 #ifndef ircd_md5_h

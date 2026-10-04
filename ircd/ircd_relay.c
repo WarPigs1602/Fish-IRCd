@@ -83,8 +83,9 @@
  * @param[in] sptr Client that originated the message.
  * @param[in] name Name of target channel.
  * @param[in] text %Message to relay.
+ * @param[in] targetc Count of targets we're sending the message to.
  */
-void relay_channel_message(struct Client* sptr, const char* name, const char* text)
+void relay_channel_message(struct Client* sptr, const char* name, const char* text, const int targetc)
 {
   struct Channel* chptr;
   struct Membership* memb;
@@ -111,6 +112,12 @@ void relay_channel_message(struct Client* sptr, const char* name, const char* te
   memb = find_member_link(chptr, sptr);
   if (memb && IsDelayedTarget(memb))
     ClearDelayedTarget(memb);
+
+  /* +T check */
+  if ((chptr->mode.mode & MODE_NOMULTITARGET) && (targetc > 1)) {
+    send_reply(sptr, ERR_CANNOTSENDTOCHAN, chptr->chname);
+    return;
+  }
 
   if (chptr->mode.mode & MODE_NOCOLOR) {
     for (ch = text; *ch != '\0'; ++ch) {
@@ -147,8 +154,9 @@ void relay_channel_message(struct Client* sptr, const char* name, const char* te
  * @param[in] sptr Client that originated the message.
  * @param[in] name Name of target channel.
  * @param[in] text %Message to relay.
+ * @param[in] targetc Count of targets we're sending the notice to.
  */
-void relay_channel_notice(struct Client* sptr, const char* name, const char* text)
+void relay_channel_notice(struct Client* sptr, const char* name, const char* text, const int targetc)
 {
   struct Channel* chptr;
   struct Membership* memb;
@@ -172,6 +180,13 @@ void relay_channel_notice(struct Client* sptr, const char* name, const char* tex
   memb = find_member_link(chptr, sptr);
   if (memb && IsDelayedTarget(memb))
     ClearDelayedTarget(memb);
+
+  if (chptr->mode.mode & MODE_NONOTICE)
+    return;
+
+  /* +T check */
+  if ((chptr->mode.mode & MODE_NOMULTITARGET) && (targetc > 1))
+    return;
 
   if (chptr->mode.mode & MODE_NOCOLOR) {
     for (ch = text; *ch != '\0'; ++ch) {

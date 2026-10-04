@@ -33,7 +33,7 @@ pytestmark = pytest.mark.multi_server
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 LEAF1_SERVICE = "ircd-leaf1"
-LEAF1_CONF = "/opt/ircu/lib/ircd.conf"
+LEAF1_CONF = "/opt/fishircd/lib/ircd.conf"
 
 # Mirror the constants from test_fix.py: a burst large enough that a throttled
 # sender provably cannot deliver it all within the window, but an exempt one can.

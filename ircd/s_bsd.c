@@ -55,6 +55,7 @@
 #include "s_debug.h"
 #include "s_misc.h"
 #include "s_user.h"
+#include "patchlevel.h"
 #include "send.h"
 #include "struct.h"
 #include "sys.h"
@@ -424,7 +425,7 @@ static int completed_connection(struct Client* cptr)
   cli_lasttime(cptr) = CurrentTime;
   ClearPingSent(cptr);
 
-  sendrawto_one(cptr, MSG_SERVER " %s 1 %Tu %Tu J%s %s%s +%s6 :%s",
+  sendrawto_one(cptr, MSG_SERVER " %s 1 %Tu %Tu J%s %s%s +%s6n :%s",
                 cli_name(&me), cli_serv(&me)->timestamp, newts,
 		MAJOR_PROTOCOL, NumServCap(&me),
 		feature_bool(FEAT_HUB) ? "h" : "", cli_info(&me));

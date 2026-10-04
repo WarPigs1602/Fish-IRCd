@@ -86,6 +86,7 @@
 #include "channel.h"
 #include "hash.h"
 #include "ircd.h"
+#include "ircd_alloc.h"
 #include "ircd_features.h"
 #include "ircd_log.h"
 #include "ircd_reply.h"
@@ -100,7 +101,7 @@
 
 /* #include <assert.h> -- Now using assert in ircd_log.h */
 
-static void make_oper(struct Client *sptr, struct Client *dptr)
+static void make_oper(struct Client *sptr, struct Client *dptr, const char *opername)
 {
   struct Flags old_mode = cli_flags(dptr);
 
@@ -119,14 +120,32 @@ static void make_oper(struct Client *sptr, struct Client *dptr)
     cli_max_flood(dptr) = 0;
     client_set_privs(dptr, NULL, 1);
 
-    send_umode_out(dptr, dptr, &old_mode, HasPriv(dptr, PRIV_PROPAGATE));
+    if (opername && *opername) {
+      if (cli_user(dptr)->opername)
+        MyFree(cli_user(dptr)->opername);
+      if ((opername[0] == NOOPERNAMECHARACTER) && (opername[1] == '\0')) {
+        cli_user(dptr)->opername = NULL;
+      } else {
+        size_t len = strlen(opername);
+        if (len > ACCOUNTLEN) {
+          protocol_violation(sptr, "Received opername (%s) longer than %d for %s; ignoring.", opername, ACCOUNTLEN, cli_name(dptr));
+          cli_user(dptr)->opername = NULL;
+        } else {
+          cli_user(dptr)->opername = (char*) MyMalloc(len + 1);
+          assert(0 != cli_user(dptr)->opername);
+          ircd_strncpy(cli_user(dptr)->opername, opername, ACCOUNTLEN);
+        }
+      }
+    }
+
+    send_umode_out(dptr, dptr, &old_mode, 1);
     send_reply(dptr, RPL_YOUREOPER);
 
     sendto_opmask_butone(0, SNO_OLDSNO, "%s (%s@%s) is now operator (%c)",
 			 cli_name(dptr), cli_user(dptr)->username,
 			 cli_sockhost(dptr), IsOper(dptr) ? 'O' : 'o');
 
-    log_write(LS_OPER, L_INFO, 0, "REMOTE OPER (%#C) by (%s)", dptr,
+    log_write(LS_OPER, L_INFO, 0, "REMOTE OPER (%#R) by (%s)", dptr,
 	      cli_name(sptr));
   }
 }
@@ -153,6 +172,10 @@ static void de_oper(struct Client *dptr)
     cli_max_sendq(dptr) = 0;
     cli_max_flood(dptr) = 0;
     client_set_privs(dptr, NULL, 0);
+    if (cli_user(dptr)->opername) {
+      MyFree(cli_user(dptr)->opername);
+      cli_user(dptr)->opername = NULL;
+    }
     /* prop must be 1 so send_umode_out includes FLAG_OPER; after de_oper,
      * HasPriv(PRIV_PROPAGATE) is false but SEND_UMODES_BUT_OPER would drop -o. */
     send_umode_out(dptr, dptr, &old_mode, 1);
@@ -212,7 +235,7 @@ int ms_opmode(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
      * not support remote mode setting or setting +o.
      */
     if (!strcmp(parv[2], "+o") && !IsOper(dptr))
-      make_oper(sptr, dptr);
+      make_oper(sptr, dptr, parv[3]);
     else if (!strcmp(parv[2], "-o") && IsOper(dptr))
       de_oper(dptr);
     else if (!strcmp(parv[2], "+x") && IsAccount(dptr) && !HasHiddenHost(dptr)) {

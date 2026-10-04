@@ -45,8 +45,9 @@
 	_CAP(CHGHOST, FEAT_CAP_CHGHOST, 0, "chghost"), \
 	_CAP(ECHOMESSAGE, FEAT_CAP_ECHOMESSAGE, 0, "echo-message"), \
 	_CAP(EXTJOIN, FEAT_CAP_EXTJOIN, 0, "extended-join"), \
-	_CAP(INVITENOTIFY, FEAT_CAP_INVITENOTIFY, 0, "invite-notify"), \
-	_CAP(UHNAMES, FEAT_CAP_UHNAMES, 0, "userhost-in-names"), \
+  _CAP(INVITENOTIFY, FEAT_CAP_INVITENOTIFY, 0, "invite-notify"), \
+  _CAP(MULTI_PREFIX, FEAT_CAP_MULTI_PREFIX, 0, "multi-prefix"), \
+  _CAP(UHNAMES, FEAT_CAP_UHNAMES, 0, "userhost-in-names"), \
 	_CAP(MESSAGE_TAGS, FEAT_CAP_MESSAGE_TAGS, 0, "message-tags"), \
 	_CAP(SERVER_TIME, FEAT_CAP_SERVER_TIME, 0, "server-time"), \
 	_CAP(ACCOUNT_TAG, FEAT_CAP_ACCOUNT_TAG, 0, "account-tag"), \

@@ -98,6 +98,9 @@ typedef unsigned long flagpage_t;
 /** String containing valid user modes, in no particular order. */
 #define infousermodes "diOoswkgxczIR"
 
+/** Character to indicate no oper name available */
+#define NOOPERNAMECHARACTER '-'
+
 /** Operator privileges. */
 enum Priv
   {
@@ -132,6 +135,10 @@ enum Priv
     PRIV_FORCE_OPMODE, /**< can hack modes on quarantined channels */
     PRIV_FORCE_LOCAL_OPMODE, /**< can hack modes on quarantined local channels */
     PRIV_APASS_OPMODE, /**< can hack modes +A/-A/+U/-U */
+    PRIV_FREEFORM,     /**< oper can use freeform sethost */
+    PRIV_CHECK,        /**< oper can use /check */
+    PRIV_XTRA_OPER,    /**< oper can set mode +X (extra oper powers) */
+    PRIV_PARANOID,     /**< oper can set mode +P (paranoid whois notices) */
     PRIV_LAST_PRIV /**< number of privileges */
   };
 
@@ -182,6 +189,11 @@ enum Flag
     FLAG_SPAMHOLD,                  /**< user is the sender or recipient of a message on hold */
     FLAG_HIDEIDLE,                  /**< Hide idle time from non-opers */
     FLAG_COMMONCHANS,               /**< only accepts messages from users in common channels */
+    FLAG_OPERNAME,                  /**< Server sends opername in mode string */
+    FLAG_SETHOST,                   /**< user has set a fake host (+h) */
+    FLAG_XTRAOP,                    /**< oper has special powers (+X) */
+    FLAG_NOCHAN,                    /**< user's channels are hidden (+n) */
+    FLAG_PARANOID,                  /**< sends notices on whois (+P) */
     FLAG_LAST_FLAG,                 /**< number of flags */
     FLAG_LOCAL_UMODES = FLAG_LOCOP, /**< First local mode flag */
     FLAG_GLOBAL_UMODES = FLAG_OPER, /**< First global mode flag */
@@ -647,6 +659,12 @@ struct Client {
 #define IsIPv6(x)               HasFlag(x, FLAG_IPV6)
 /** Return non-zero if the client claims to be a services server. */
 #define IsService(x)            HasFlag(x, FLAG_SERVICE)
+/** Return non-zero if the server should send opername information. */
+#define IsSendOperName(x)       HasFlag(x, FLAG_OPERNAME)
+/** Mark a server as sending opername. */
+#define SetOperName(x)          SetFlag(x, FLAG_OPERNAME)
+/** Clear the server's opername flag. */
+#define ClearOperName(x)        ClrFlag(x, FLAG_OPERNAME)
 /** Return non-zero if the client has an account stamp. */
 #define IsAccount(x)            HasFlag(x, FLAG_ACCOUNT)
 /** Return non-zero if the client has set mode +x (hidden host). */
@@ -665,6 +683,14 @@ struct Client {
 #define IsCommonChans(x)        HasFlag(x, FLAG_COMMONCHANS)
 /** Return non-zero if the client is exempt from input throttling. */
 #define IsExemptThrottle(x)     HasFlag(x, FLAG_EXEMPT_THROTTLE)
+/** Return non-zero if the client has set a fake host (+h). */
+#define IsSetHost(x)            HasFlag(x, FLAG_SETHOST)
+/** Return non-zero if the client has mode +X (extra oper powers). */
+#define IsXtraOp(x)             HasFlag(x, FLAG_XTRAOP)
+/** Return non-zero if the client has mode +n (hidden channels). */
+#define IsNoChan(x)             HasFlag(x, FLAG_NOCHAN)
+/** Return non-zero if the client has mode +P (paranoid whois). */
+#define IsParanoid(x)           HasFlag(x, FLAG_PARANOID)
 
 /** Return non-zero if the client has completed the handshake for a WebSocket connection. */
 #define IsWebsocket(x)           (cli_ws_mode(x) != WS_NONE)
@@ -727,6 +753,14 @@ struct Client {
 #define SetCommonChans(x)       SetFlag(x, FLAG_COMMONCHANS)
 /** Mark a client as being exempt from input throttling. */
 #define SetExemptThrottle(x)    SetFlag(x, FLAG_EXEMPT_THROTTLE)
+/** Mark a client as having set a fake host (+h). */
+#define SetSetHost(x)           SetFlag(x, FLAG_SETHOST)
+/** Mark a client as having mode +X (extra oper powers). */
+#define SetXtraOp(x)            SetFlag(x, FLAG_XTRAOP)
+/** Mark a client as having mode +n (hidden channels). */
+#define SetNoChan(x)            SetFlag(x, FLAG_NOCHAN)
+/** Mark a client as having mode +P (paranoid whois). */
+#define SetParanoid(x)          SetFlag(x, FLAG_PARANOID)
 
 /** Return non-zero if \a sptr sees \a acptr as an operator. */
 #define SeeOper(sptr,acptr) (IsAnOper(acptr) && (HasPriv(acptr, PRIV_DISPLAY) \
@@ -774,6 +808,14 @@ struct Client {
 #define ClearCommonChans(x)      ClrFlag(x, FLAG_COMMONCHANS)
 /** Mark a client as no longer exempt from input throttling. */
 #define ClearExemptThrottle(x)   ClrFlag(x, FLAG_EXEMPT_THROTTLE)
+/** Remove mode +X (extra oper powers) from the client. */
+#define ClearXtraOp(x)           ClrFlag(x, FLAG_XTRAOP)
+/** Remove mode +n (hidden channels) from the client. */
+#define ClearNoChan(x)           ClrFlag(x, FLAG_NOCHAN)
+/** Remove mode +P (paranoid whois) from the client. */
+#define ClearParanoid(x)         ClrFlag(x, FLAG_PARANOID)
+/** Remove the fake host (+h) from the client. */
+#define ClearSetHost(x)          ClrFlag(x, FLAG_SETHOST)
 
 /* free flags */
 #define FREEFLAG_SOCKET	0x0001	/**< socket needs to be freed */

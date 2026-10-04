@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal DNS server for ircu resolver integration tests.
+"""Minimal DNS server for Fish-IRCd resolver integration tests.
 
 Serves scripted UDP/TCP responses for client auth lookups and exposes a
 small HTTP control API on port 8053 for pytest to switch scenarios.

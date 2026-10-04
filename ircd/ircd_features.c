@@ -41,6 +41,7 @@
 #include "random.h"	/* random_seed_set */
 #include "s_bsd.h"
 #include "s_debug.h"
+#include "sasl.h"
 #include "s_misc.h"
 #include "s_stats.h"
 #include "send.h"
@@ -169,6 +170,13 @@ static void
 feature_notify_clienttagdeny(void)
 {
   msg_tag_clienttagdeny_rebuild();
+}
+
+/** Re-evaluate SASL availability when the local fallback server changes. */
+static void
+feature_notify_sasl_server(void)
+{
+  sasl_check_capability();
 }
 
 /** Handle an update to FEAT_HIS_SERVERNAME. */
@@ -329,6 +337,9 @@ static struct FeatureDesc {
   F_B(TRUST_USERNAME, 0, 1, 0),
   F_S(HIDDEN_HOST, FEAT_CASE, "users.undernet.org", 0),
   F_S(HIDDEN_IP, 0, "127.0.0.1", 0),
+  F_B(SETHOST, 0, 0, 0),
+  F_B(SETHOST_USER, 0, 0, 0),
+  F_B(SETHOST_AUTO, 0, 0, 0),
   F_B(CONNEXIT_NOTICES, 0, 0, 0),
   F_B(OPLEVELS, 0, 0, 0),
   F_B(ZANNELS, 0, 0, 0),
@@ -386,6 +397,8 @@ static struct FeatureDesc {
 
   /* features that affect all operators */
   F_B(CONFIG_OPERCMDS, 0, 0, 0),
+  F_B(EXTENDED_CHECKCMD, 0, 0, 0),
+  F_B(USER_HIDECHANS, 0, 0, 0),
 
   /* IRCv3 capabilities */
   F_B(CAP_ACCOUNTNOTIFY, 0, 1, 0),
@@ -394,11 +407,13 @@ static struct FeatureDesc {
   F_B(CAP_ECHOMESSAGE, 0, 1, 0),
   F_B(CAP_EXTJOIN, 0, 1, 0),
   F_B(CAP_INVITENOTIFY, 0, 1, 0),
+  F_B(CAP_MULTI_PREFIX, 0, 1, 0),
   F_B(CAP_UHNAMES, 0, 1, 0),
   F_B(CAP_MESSAGE_TAGS, 0, 1, 0),
   F_B(CAP_SERVER_TIME, 0, 1, 0),
   F_B(CAP_ACCOUNT_TAG, 0, 1, 0),
   F_B(CAP_SASL, 0, 1, 0),
+  F_S(SASL_SERVER, FEAT_NULL, 0, feature_notify_sasl_server),
 
   /* IRCv3 CLIENTTAGDENY: deny-list / allow-list for client-only (+) tags.
    * Default "*" denies all; empty (FEAT_NULL) allows all. Rebuilds via notify. */
