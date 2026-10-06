@@ -388,6 +388,9 @@ void send_buffer(struct Client* to, struct Client* from, struct MsgBuf* buf, int
                                   invent);
       prefix = taglen ? tagbuf : 0;
     }
+  } else if (!CapHas(cli_active(to), CAP_MESSAGE_TAGS) &&
+             tctx && tctx->tok && !strcmp(tctx->tok, TOK_TAGMSG)) {
+    return;
   } else if (cache) {
     if (cache->ctx.client_relay) {
       taglen = msg_tag_format(cache->prefix, sizeof(cache->prefix),

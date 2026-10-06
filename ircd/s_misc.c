@@ -267,6 +267,11 @@ static void exit_one_client(struct Client* bcptr, const char* comment)
     else
       Count_remoteserverquits(UserStats);
 
+    /* Fail pending SASL exchanges when the SASL server itself goes away,
+     * so their clients are told immediately instead of timing out. */
+    if (*sasl_server() && !match(sasl_server(), cli_name(bcptr)))
+      sasl_fail_pending_sessions();
+
     sasl_check_capability();
   }
   else if (IsMe(bcptr))

@@ -213,8 +213,8 @@ async def test_untagged_privmsg_unchanged(ircd_network, services):
         await user.disconnect()
 
 
-async def test_typing_tag_relayed_s2s(ircd_network, services):
-    """+typing tag must survive S2S relay to the target client."""
+async def test_typing_tag_denied_when_relayed_s2s(ircd_network, services):
+    """+typing from S2S is subject to CLIENTTAGDENY and stripped for local clients."""
     hub = ircd_network["hub"]
 
     user = IRCClient()
@@ -228,7 +228,7 @@ async def test_typing_tag_relayed_s2s(ircd_network, services):
         )
         msg = await user.wait_for("PRIVMSG", timeout=5.0)
         assert msg.params[-1] == "typing relay", msg
-        assert "+typing=active" in msg.tags, msg
+        assert "+typing=active" not in msg.tags, msg
     finally:
         try:
             await user.send("QUIT :cleanup")

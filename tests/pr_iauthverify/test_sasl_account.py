@@ -323,3 +323,37 @@ async def test_sasl_server_feature_fallback(ircd_hub, services):
         await oper.send("RESET SASL_SERVER")
         await oper.wait_for("284", timeout=5.0)
         await oper.disconnect()
+
+
+async def test_sasl_capability_advertises_mechanisms(ircd_hub, services):
+    """The sasl capability advertises the configured mechanism list."""
+    client = IRCClient()
+    await client.connect(ircd_hub["host"], ircd_hub["port"])
+    try:
+        await client.send("CAP LS 302")
+        msg = await client.wait_for("CAP", timeout=5.0)
+        caps = msg.params[-1].split()
+        assert "sasl=PLAIN" in caps, f"expected sasl=PLAIN in {caps}"
+    finally:
+        await client.disconnect()
+
+
+async def test_sasl_mechanism_change_notifies_cap_notify(ircd_hub, services):
+    """Changing sasl.mechanisms re-notifies registered cap-notify clients."""
+    client = IRCClient()
+    await client.connect(ircd_hub["host"], ircd_hub["port"])
+    try:
+        await client.send("CAP LS 302")
+        await client.wait_for("CAP", timeout=5.0)
+        await client.send("NICK mechnotify")
+        await client.send("USER testuser 0 * :Test User")
+        await client.send("CAP END")
+        await client.wait_for("001", timeout=10.0)
+
+        await services.send_config("sasl.mechanisms", "PLAIN,EXTERNAL")
+        msg = await client.wait_for("CAP", timeout=5.0)
+        assert msg.params[1] == "NEW", f"expected CAP NEW, got {msg}"
+        assert msg.params[-1] == "sasl=PLAIN,EXTERNAL", f"got {msg}"
+    finally:
+        await services.send_config("sasl.mechanisms", "PLAIN")
+        await client.disconnect()

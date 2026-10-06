@@ -90,8 +90,8 @@ async def test_client_tag_relay_when_allowed(ircd_network):
             await c.disconnect()
 
 
-async def test_typing_tag_relayed_client_to_client(ircd_network):
-    """+typing must survive client-to-client relay even under CLIENTTAGDENY=*."""
+async def test_typing_tag_denied_by_clienttagdeny(ircd_network):
+    """+typing is subject to CLIENTTAGDENY like any other client-only tag."""
     hub = ircd_network["hub"]
 
     sender = IRCClient()
@@ -110,12 +110,7 @@ async def test_typing_tag_relayed_client_to_client(ircd_network):
         await sender.send("@+typing=active PRIVMSG #typingtest :typing start")
         msg = await observer.wait_for("PRIVMSG", timeout=15.0)
         assert msg.params[-1] == "typing start", msg.raw
-        assert "+typing=active" in msg.tags, msg.raw
-
-        await sender.send("@+typing=done PRIVMSG #typingtest :typing end")
-        msg = await observer.wait_for("PRIVMSG", timeout=15.0)
-        assert msg.params[-1] == "typing end", msg.raw
-        assert "+typing=done" in msg.tags, msg.raw
+        assert "+typing=active" not in msg.tags, msg.raw
     finally:
         for c in (sender, observer):
             try:

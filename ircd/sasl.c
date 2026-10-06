@@ -153,6 +153,8 @@ int sasl_mechanism_supported(const char* mechanism)
  */
 void sasl_check_capability(void)
 {
+  /* Keep the advertised mechanism list in sync with the configuration. */
+  cap_set_value(E_CAP_SASL, netconf_str(NETCONF_SASL_MECHANISMS));
   cap_update_availability(E_CAP_SASL, sasl_available());
 }
 
@@ -167,19 +169,24 @@ static void sasl_config_callback(const char *key, const char *old_value, const c
          key, new_value ? new_value : "(unset)",
          old_value ? old_value : "(unset)"));
   
-  /* Update SASL capability value if mechanisms changed */
-  if (ircd_strcmp(key, "sasl.mechanisms") == 0) {
-    cap_set_value(E_CAP_SASL, new_value ? new_value : "");
-  }
-  
-  /* Update SASL capability availability */
+  /* Update SASL capability value and availability */
   sasl_check_capability();
+  
+  /* Re-notify cap-notify clients when the mechanism list changes while
+   * SASL is available, so they learn the supported mechanisms. */
+  if (ircd_strcmp(key, "sasl.mechanisms") == 0
+      && sasl_available()
+      && ircd_strcmp(old_value ? old_value : "",
+                     new_value ? new_value : "") != 0)
+    cap_new(E_CAP_SASL);
 }
 
 /** Initialize SASL subsystem and register config callbacks */
 void sasl_init(void)
 {
   config_register_callback("sasl.", sasl_config_callback);
+  /* Initialize the SASL capability value from the configuration. */
+  cap_set_value(E_CAP_SASL, netconf_str(NETCONF_SASL_MECHANISMS));
 }
 
 /** Compute hash bucket index for a given cookie. */
@@ -279,6 +286,38 @@ void sasl_send_abort(struct Client* cptr)
   if (server)
     sendcmdto_one(&me, CMD_AUTHENTICATE, server, "%s %s *", target,
                   sasl_session_host((unsigned long)cli_sasl(cptr)));
+}
+
+/** Fail all pending local SASL sessions because the SASL server is unreachable.
+ * Called when the configured SASL server disconnects, so that clients with an
+ * exchange in progress are notified immediately instead of waiting for the
+ * session timeout to expire.
+ */
+void sasl_fail_pending_sessions(void)
+{
+  struct SaslSessionEntry* entry;
+  struct SaslSessionEntry* next;
+  struct Client* cli;
+  int i;
+
+  for (i = 0; i < SASL_HASH_SIZE; i++) {
+    entry = sasl_session_table[i];
+    while (entry) {
+      next = entry->next;
+      cli = entry->client;
+      if (cli && cli_magic(cli) == CLIENT_MAGIC && MyConnect(cli)
+          && cli_sasl(cli) == entry->cookie) {
+        Debug((DEBUG_DEBUG, "SASL session failed for %s (cookie: %lu): "
+               "server unreachable", cli_name(cli), entry->cookie));
+        sasl_stop_timeout(cli);
+        sasl_session_remove(entry->cookie);
+        cli_sasl(cli) = 0;
+        send_reply(cli, ERR_SASLFAIL,
+                   "The login server is currently disconnected.  Please excuse the inconvenience.");
+      }
+      entry = next;
+    }
+  }
 }
 
 /** Relay native SASL requests and deliver replies to their home server. */

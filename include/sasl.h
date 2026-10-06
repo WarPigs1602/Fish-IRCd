@@ -34,6 +34,7 @@ extern int sasl_available(void);
 extern int sasl_mechanism_supported(const char* mechanism);
 extern void sasl_check_capability(void);
 extern void sasl_send_abort(struct Client* cptr);
+extern void sasl_fail_pending_sessions(void);
 extern struct Client* find_sasl_client(unsigned long cookie);
 extern const char* sasl_session_target(unsigned long cookie);
 extern const char* sasl_session_host(unsigned long cookie);
