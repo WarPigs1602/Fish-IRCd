@@ -77,6 +77,7 @@ static const struct lexer_token tokens[] = {
   { "ciphers", CIPHERS },
   { "class", CLASS },
   { "client", CLIENT },
+  { "cloak", CLOAK },
   { "cloudflare", CLOUDFLARE },
   { "connect", CONNECT },
   { "connectfreq", CONNECTFREQ },

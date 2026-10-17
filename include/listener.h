@@ -60,6 +60,8 @@ enum ListenerFlag {
   LISTEN_WEBSOCKET,
   /** Port is behind Cloudflare; trust CF-Connecting-IP on websocket handshakes. */
   LISTEN_CLOUDFLARE,
+  /** Clients on this port get a cloaked host derived from their IP. */
+  LISTEN_CLOAK,
   /** Sentinel for counting listener flags. */
   LISTEN_LAST_FLAG
 };
@@ -97,6 +99,7 @@ struct Listener {
 #define listener_tls(LISTENER)    FlagHas(&(LISTENER)->flags, LISTEN_TLS)
 #define listener_websocket(LISTENER) FlagHas(&(LISTENER)->flags, LISTEN_WEBSOCKET)
 #define listener_cloudflare(LISTENER) FlagHas(&(LISTENER)->flags, LISTEN_CLOUDFLARE)
+#define listener_cloak(LISTENER) FlagHas(&(LISTENER)->flags, LISTEN_CLOAK)
 /** Return non-zero if \a CLI accepted a Cloudflare websocket listener. */
 #define IsCloudflarePort(CLI) \
   (cli_listener(CLI) && listener_cloudflare(cli_listener(CLI)))

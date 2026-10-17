@@ -235,6 +235,9 @@ static void do_whois(struct Client* sptr, struct Client *acptr, int parc)
     if (IsAccount(acptr))
       send_reply(sptr, RPL_WHOISACCOUNT, name, user->account);
 
+    if (IsBot(acptr) || IsChannelService(acptr))
+      send_reply(sptr, RPL_WHOISBOT, name);
+
     if (HasHiddenHost(acptr) && (IsAnOper(sptr) || acptr == sptr))
       send_reply(sptr, RPL_WHOISACTUALLY, name, user->username,
                  user->realhost, ircd_ntoa(&cli_ip(acptr)));
@@ -531,4 +534,3 @@ int ms_whois(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
 
   return 0;
 }
-

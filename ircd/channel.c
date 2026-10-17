@@ -3666,6 +3666,58 @@ joinbuf_init(struct JoinBuf *jbuf, struct Client *source,
     jbuf->jb_channels[i] = 0;
 }
 
+unsigned int
+channel_set_auto_modes(struct Channel *chptr, char *modes,
+                       size_t modes_len)
+{
+  static const struct {
+    unsigned int mode;
+    char letter;
+  } channel_modes[] = {
+    { MODE_PRIVATE, 'p' },
+    { MODE_SECRET, 's' },
+    { MODE_MODERATED, 'm' },
+    { MODE_TOPICLIMIT, 't' },
+    { MODE_INVITEONLY, 'i' },
+    { MODE_NOPRIVMSGS, 'n' },
+    { MODE_REGONLY, 'r' },
+    { MODE_NOCOLOR, 'c' },
+    { MODE_NOCTCP, 'C' },
+    { MODE_NONOTICE, 'N' },
+    { MODE_DELJOINS, 'D' },
+    { MODE_NOPARTMSGS, 'u' },
+    { MODE_NOMULTITARGET, 'T' },
+    { MODE_MODERATENOREG, 'M' }
+  };
+  const char *configured = feature_str(FEAT_AUTOCHANMODES_LIST);
+  unsigned int count = 0;
+  unsigned int seen = 0;
+  const char *letter;
+  unsigned int i;
+
+  if (modes && modes_len)
+    modes[0] = '\0';
+  if (!chptr || !modes || !modes_len ||
+      !feature_bool(FEAT_AUTOCHANMODES) || !configured)
+    return 0;
+
+  for (letter = configured; *letter; ++letter) {
+    for (i = 0; i < sizeof(channel_modes) / sizeof(channel_modes[0]); ++i)
+      if (*letter == channel_modes[i].letter)
+        break;
+    if (i == sizeof(channel_modes) / sizeof(channel_modes[0]) ||
+        (seen & channel_modes[i].mode) || count + 1 >= modes_len)
+      continue;
+
+    seen |= channel_modes[i].mode;
+    chptr->mode.mode |= channel_modes[i].mode;
+    modes[count++] = *letter;
+    modes[count] = '\0';
+  }
+
+  return count;
+}
+
 /*
  * Add a channel to the join buffer
  */
@@ -3770,14 +3822,18 @@ int
 joinbuf_flush(struct JoinBuf *jbuf)
 {
   char chanlist[BUFSIZE];
+  struct Channel *channels[MAXJOINARGS];
   int chanlist_i = 0;
+  int channel_count;
   int i;
 
   if (!jbuf->jb_count || jbuf->jb_type == JOINBUF_TYPE_PARTALL ||
       jbuf->jb_type == JOINBUF_TYPE_JOIN)
     return 0; /* no joins to process */
 
-  for (i = 0; i < jbuf->jb_count; i++) { /* build channel list */
+  channel_count = jbuf->jb_count;
+  for (i = 0; i < channel_count; i++) { /* build channel list */
+    channels[i] = jbuf->jb_channels[i];
     build_string(chanlist, &chanlist_i,
 		 jbuf->jb_channels[i] ? jbuf->jb_channels[i]->chname : "0", 0,
 		 i == 0 ? '\0' : ',');
@@ -3798,6 +3854,14 @@ joinbuf_flush(struct JoinBuf *jbuf)
   case JOINBUF_TYPE_CREATE:
     sendcmdto_serv_butone(jbuf->jb_source, CMD_CREATE, jbuf->jb_connect,
 			  "%s %Tu", chanlist, jbuf->jb_create);
+    if (MyUser(jbuf->jb_source)) {
+      for (i = 0; i < channel_count; ++i) {
+        char modes[32];
+        if (channel_set_auto_modes(channels[i], modes, sizeof(modes)))
+          sendcmdto_serv_butone(jbuf->jb_source, CMD_MODE, jbuf->jb_connect,
+                                "%H +%s", channels[i], modes);
+      }
+    }
     break;
 
   case JOINBUF_TYPE_PART:

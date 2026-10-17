@@ -105,7 +105,9 @@ static void userip_formatter(struct Client* cptr, struct Client *sptr, struct Ms
 	       * of +x.  If an oper wants the real IP, he should go to
 	       * /whois to get it.
 	       */
-	      HasHiddenHost(cptr) && (sptr != cptr) ?
+	      (HasHiddenHost(cptr) && sptr != cptr) ||
+	      ((HasFlag(cptr, FLAG_SETHOST) ||
+	        feature_bool(FEAT_HIS_USERIP)) && !IsAnOper(sptr)) ?
 	      feature_str(FEAT_HIDDEN_IP) :
 	      ircd_ntoa(&cli_ip(cptr)));
 }

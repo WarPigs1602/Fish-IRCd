@@ -257,6 +257,7 @@ extern const struct Numeric* get_error_numeric(int err);
 #define RPL_TOPIC            332
 #define RPL_TOPICWHOTIME     333        /* Undernet extension */
 #define RPL_LISTUSAGE        334        /* Undernet extension */
+#define RPL_WHOISBOT         335
 /*	RPL_COMMANDSYNTAX    334	   Dalnet */
 /*	RPL_LISTSYNTAX	     334	   unreal */
 /*      RPL_CHANPASSOK       338           IRCnet extension (?)*/

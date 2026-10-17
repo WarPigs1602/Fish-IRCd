@@ -522,6 +522,13 @@ msg_tag_format(char *buf, size_t buflen, struct Client *to,
 
   /* client-only tags */
   if (CapHas(cli_active(to), CAP_MESSAGE_TAGS)) {
+    if (from && IsUser(from) && cli_user(from)
+        && (IsBot(from) || IsChannelService(from))) {
+      pos = msg_tag_append(pos, end, &wrote, "bot", NULL);
+      if (!pos)
+        return 0;
+    }
+
     for (tag = tags; tag; tag = tag->next) {
       if (!msg_tag_key_client_only(tag->key))
         continue;

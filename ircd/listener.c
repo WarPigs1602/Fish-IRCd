@@ -156,7 +156,7 @@ void show_ports(struct Client* sptr, const struct StatDesc* sd,
                 char* param)
 {
   struct Listener *listener = 0;
-  char flags[16];  /* type + H + E + "4-" + "6-" + F + NUL = 9 bytes max */
+  char flags[16];  /* type + H + E + "4-" + "6-" + F + K + NUL = 10 bytes max */
   int show_hidden = IsOper(sptr);
   int count = (IsOper(sptr) || MyUser(sptr)) ? 100 : 8;
   int port = 0;
@@ -199,6 +199,8 @@ void show_ports(struct Client* sptr, const struct StatDesc* sd,
     }
     if (listener_cloudflare(listener))
       flags[len++] = 'F';
+    if (listener_cloak(listener))
+      flags[len++] = 'K';
     flags[len] = '\0';
 
     send_reply(sptr, RPL_STATSPLINE, listener->addr.port, listener->ref_count,

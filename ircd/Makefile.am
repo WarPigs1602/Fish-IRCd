@@ -11,6 +11,7 @@ ircd_SOURCES = \
 	IPcheck.c \
 	channel.c \
 	cidr_lookups.c \
+	cloak.c \
 	class.c \
 	client.c \
 	crule.c \

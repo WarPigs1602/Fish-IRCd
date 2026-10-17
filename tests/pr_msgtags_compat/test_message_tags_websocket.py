@@ -265,6 +265,7 @@ async def test_ws_notice_relays_client_tags(ircd_network):
 
     try:
         await _join([sender, observer], "#wsnotice")
+        await sender.send("MODE #wsnotice -N")
         await sender.send("@+example.com/foo=notice PRIVMSG #wsnotice :warmup")
         await observer.wait_for("PRIVMSG", timeout=5.0)
 

@@ -135,6 +135,9 @@ User modes:
  Undernet supports these additional user modes:
   +d: Deaf & Dumb.  This user will not get any channel traffic.  Used for
       bots.
+  +B: Identifies the user as a bot.  Advertised as BOT=B in RPL_ISUPPORT,
+      shown in WHO/WHOIS, and included as the IRCv3 bot message tag for
+      clients that support message-tags.
   +k: This user cannot be kicked, deop'd or /kill'd.  This usermode may only
       be set by a server, it may not be set by a user.  This is used by
       undernet service bots (X/W/UWorld etc)
@@ -212,5 +215,4 @@ Target limiting:
 
  Additional Numerics:
   ERR_TARGETTOOFAST 349
-
 

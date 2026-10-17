@@ -194,6 +194,7 @@ enum Flag
     FLAG_XTRAOP,                    /**< oper has special powers (+X) */
     FLAG_NOCHAN,                    /**< user's channels are hidden (+n) */
     FLAG_PARANOID,                  /**< sends notices on whois (+P) */
+    FLAG_BOT,                       /**< user is a bot (+B) */
     FLAG_LAST_FLAG,                 /**< number of flags */
     FLAG_LOCAL_UMODES = FLAG_LOCOP, /**< First local mode flag */
     FLAG_GLOBAL_UMODES = FLAG_OPER, /**< First global mode flag */
@@ -691,6 +692,8 @@ struct Client {
 #define IsNoChan(x)             HasFlag(x, FLAG_NOCHAN)
 /** Return non-zero if the client has mode +P (paranoid whois). */
 #define IsParanoid(x)           HasFlag(x, FLAG_PARANOID)
+/** Return non-zero if the client has mode +B (bot). */
+#define IsBot(x)                HasFlag(x, FLAG_BOT)
 
 /** Return non-zero if the client has completed the handshake for a WebSocket connection. */
 #define IsWebsocket(x)           (cli_ws_mode(x) != WS_NONE)
@@ -761,6 +764,8 @@ struct Client {
 #define SetNoChan(x)            SetFlag(x, FLAG_NOCHAN)
 /** Mark a client as having mode +P (paranoid whois). */
 #define SetParanoid(x)          SetFlag(x, FLAG_PARANOID)
+/** Mark a client as having mode +B (bot). */
+#define SetBot(x)               SetFlag(x, FLAG_BOT)
 
 /** Return non-zero if \a sptr sees \a acptr as an operator. */
 #define SeeOper(sptr,acptr) (IsAnOper(acptr) && (HasPriv(acptr, PRIV_DISPLAY) \
@@ -814,6 +819,8 @@ struct Client {
 #define ClearNoChan(x)           ClrFlag(x, FLAG_NOCHAN)
 /** Remove mode +P (paranoid whois) from the client. */
 #define ClearParanoid(x)         ClrFlag(x, FLAG_PARANOID)
+/** Remove mode +B (bot) from the client. */
+#define ClearBot(x)              ClrFlag(x, FLAG_BOT)
 /** Remove the fake host (+h) from the client. */
 #define ClearSetHost(x)          ClrFlag(x, FLAG_SETHOST)
 

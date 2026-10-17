@@ -450,6 +450,7 @@ async def test_notice_relays_client_tags(ircd_network):
 
     try:
         await _join_channel([sender, observer], "#noticetag")
+        await sender.send("MODE #noticetag -N")
         await sender.send(f"@+example.com/foo=notice PRIVMSG #noticetag :warmup")
         await observer.wait_for("PRIVMSG", timeout=5.0)
 

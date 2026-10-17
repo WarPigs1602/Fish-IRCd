@@ -83,6 +83,47 @@ async def test_local_privmsg_gets_server_time(ircd_network):
             await c.disconnect()
 
 
+async def test_bot_mode_is_advertised_and_tagged(ircd_network):
+    """Mode +B identifies bots in WHO/WHOIS and adds the IRCv3 bot tag."""
+    hub = ircd_network["hub"]
+    bot = IRCClient()
+    await bot.connect(hub["host"], hub["port"])
+    registration = await bot.register("tagbot", "testuser", "Tag Bot")
+
+    observer = IRCClient()
+    await observer.connect(hub["host"], hub["port"])
+    await observer.negotiate_cap(["message-tags"])
+    await observer.register("tagbotobs", "testuser", "Tag Bot Observer")
+
+    try:
+        assert any("BOT=B" in msg.raw for msg in registration)
+
+        await bot.send("MODE tagbot +B")
+        await bot.send("WHOIS tagbot")
+        whois_bot = await bot.wait_for("335", timeout=5.0)
+        assert "tagbot" in whois_bot.params
+
+        await bot.send("WHO tagbot")
+        who_bot = await bot.wait_for("352", timeout=5.0)
+        assert "B" in who_bot.params[6]
+
+        channel = "#tagbot"
+        await bot.send(f"JOIN {channel}")
+        await observer.send(f"JOIN {channel}")
+        await asyncio.sleep(0.3)
+
+        await bot.send(f"PRIVMSG {channel} :hello from a bot")
+        msg = await observer.wait_for("PRIVMSG", timeout=5.0)
+        assert "bot" in msg.tags.split(";"), msg.raw
+    finally:
+        for c in (bot, observer):
+            try:
+                await c.send("QUIT :cleanup")
+            except Exception:
+                pass
+            await c.disconnect()
+
+
 async def test_hub_strips_all_tags_for_service_servers(ircd_network, services):
     """Hub must not send any @tags to service servers (FLAG_SERVICE).
 

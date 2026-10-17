@@ -18,7 +18,7 @@
  * $Id$
  *
  */
-#define PATCHLEVEL "19"
+#define PATCHLEVEL "19+snircd(1.3.5-compatible)"
 
 #define RELEASE ".12."
 

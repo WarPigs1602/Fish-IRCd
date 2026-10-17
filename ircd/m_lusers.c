@@ -107,6 +107,7 @@
 int m_lusers(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
 {
   int longoutput = MyUser(sptr) || IsOper(sptr);
+  int his;
   if (parc > 2)
     if (hunt_server_cmd(sptr, CMD_LUSERS, cptr, feature_bool(FEAT_HIS_REMOTE),
                         "%s :%C", 2, parc, parv) != HUNTED_ISME)
@@ -123,12 +124,13 @@ int m_lusers(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
     send_reply(sptr, RPL_LUSERUNKNOWN, UserStats.unknowns);
   if (longoutput && UserStats.channels > 0)
     send_reply(sptr, RPL_LUSERCHANNELS, UserStats.channels);
-  send_reply(sptr, RPL_LUSERME, UserStats.local_clients,
-	     UserStats.local_servers);
+  his = feature_bool(FEAT_HIS_LUSERS_ME) && !IsOper(sptr);
+  send_reply(sptr, RPL_LUSERME, his ? 1 : UserStats.local_clients,
+	     his ? 1 : UserStats.local_servers);
 
   sendcmdto_one(&me, CMD_NOTICE, sptr, "%C :Highest connection count: "
-		"%d (%d clients)", sptr, max_connection_count,
-		max_client_count);
+		"%d (%d clients)", sptr, his ? 2 : max_connection_count,
+		his ? 1 : max_client_count);
 
   return 0;
 }

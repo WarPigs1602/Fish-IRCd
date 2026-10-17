@@ -265,6 +265,31 @@ HIDDEN_IP
 This selects a fake IP to be shown on /USERIP and /WHO %i when the
 target has a hidden host (see HOST_HIDING).
 
+CLOAK_KEY
+ * Type: string
+ * Default: (none)
+
+Secret used to derive cloaked hostnames for clients connecting on a
+Port block with "cloak = yes;".  Cloaking is skipped while this is
+unset.  Use the same key on every server, otherwise a user would show
+a different host depending on the server; keep it private and long, as
+anyone knowing it can brute-force cloaked addresses.  The value is
+never displayed.
+
+CLOAK_SUFFIX_V4
+ * Type: string
+ * Default: ip
+
+Trailing label of cloaked IPv4 hosts, e.g. 1a2b3c4d.5e6f7a8b.9c0d1e2f.ip
+The result must fit in HOSTLEN (63) characters.
+
+CLOAK_SUFFIX_V6
+ * Type: string
+ * Default: ip6
+
+Trailing label of cloaked IPv6 hosts.  The three hashes cover the full
+address, the /64 and the /48 prefix.
+
 TRUST_USERNAME
  * Type: boolean
  * Default: TRUE
@@ -1075,3 +1100,58 @@ impractical to become the channel manager by clearing out the channel.
 It must be set to FALSE if there are both 2.10.11.x servers and
 2.10.12.y servers on the network where y < 4.  It should be set to
 TRUE whenever the OPLEVELS features is TRUE.
+
+AUTOINVISIBLE
+ * Type: boolean
+ * Default: TRUE
+
+When enabled, local users are set +i when they register and cannot remove
+that mode unless they are a global operator.
+
+USER_HIDEIDLETIME
+ * Type: boolean
+ * Default: FALSE
+
+When enabled, non-operators may keep user mode +I to hide their idle time
+from WHOIS queries. When disabled, only global operators may keep that mode.
+
+AUTOCHANMODES
+ * Type: boolean
+ * Default: TRUE
+
+When enabled, the modes listed in AUTOCHANMODES_LIST are set on channels
+created by a local user joining them. The modes are also propagated to
+servers after the channel CREATE.
+
+AUTOCHANMODES_LIST
+ * Type: string
+ * Default: "ntCN"
+
+The case-sensitive list of simple channel modes to set automatically.
+Supported modes are p, s, m, t, i, n, r, c, C, N, D, u, T, and M.
+
+HIS_WHO_FILTERIP
+ * Type: boolean
+ * Default: TRUE
+
+When enabled, non-operators cannot use IP addresses as WHO search criteria.
+
+HIS_USERGLINE
+ * Type: boolean
+ * Default: TRUE
+
+When enabled, the user-facing GLINE listing command is disabled.
+
+HIS_LUSERS_ME
+ * Type: boolean
+ * Default: FALSE
+
+When enabled, LUSERS reports fixed, reduced local client/server counts and
+highest-connection counts to non-operators.
+
+HIS_USERIP
+ * Type: boolean
+ * Default: TRUE
+
+When enabled, USERIP hides IP addresses from non-operators. IPs also remain
+hidden for users with hidden or set hosts.

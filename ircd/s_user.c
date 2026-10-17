@@ -31,6 +31,7 @@
 #include "channel.h"
 #include "class.h"
 #include "client.h"
+#include "cloak.h"
 #include "hash.h"
 #include "ircd.h"
 #include "ircd_alloc.h"
@@ -363,12 +364,17 @@ int register_user(struct Client *cptr, struct Client *sptr)
 
     Count_unknownbecomesclient(sptr, UserStats);
 
+    if (feature_bool(FEAT_AUTOINVISIBLE))
+      SetInvisible(sptr);
+
     if (feature_bool(FEAT_SETHOST_AUTO)) {
       if (conf_check_slines(sptr)) {
         send_reply(sptr, RPL_USINGSLINE);
         SetSetHost(sptr);
       }
     }
+
+    cloak_client(sptr);
 
     /*
      * Set user's initial modes
@@ -545,7 +551,8 @@ static const struct UserMode {
   { FLAG_SETHOST,            'h' },
   { FLAG_XTRAOP,             'X' },
   { FLAG_NOCHAN,             'n' },
-  { FLAG_PARANOID,           'P' }
+  { FLAG_PARANOID,           'P' },
+  { FLAG_BOT,                'B' }
 };
 
 /** Length of #userModeList. */
@@ -1496,7 +1503,7 @@ int set_user_mode(struct Client *cptr, struct Client *sptr, int parc,
       case 'i':
         if (what == MODE_ADD)
           SetInvisible(sptr);
-        else
+        else if (!feature_bool(FEAT_AUTOINVISIBLE) || IsOper(sptr))
           ClearInvisible(sptr);
         break;
       case 'd':
@@ -1534,6 +1541,12 @@ int set_user_mode(struct Client *cptr, struct Client *sptr, int parc,
           SetParanoid(sptr);
         else
           ClearParanoid(sptr);
+        break;
+      case 'B':
+        if (what == MODE_ADD)
+          SetBot(sptr);
+        else
+          ClearBot(sptr);
         break;
       case 'g':
         if (what == MODE_ADD)
@@ -1627,6 +1640,9 @@ int set_user_mode(struct Client *cptr, struct Client *sptr, int parc,
       ClearXtraOp(sptr);
     if (!FlagHas(&setflags, FLAG_NOCHAN) && !(IsOper(sptr) || feature_bool(FEAT_USER_HIDECHANS)))
       ClearNoChan(sptr);
+    if (!FlagHas(&setflags, FLAG_HIDEIDLE) &&
+        !(IsOper(sptr) || feature_bool(FEAT_USER_HIDEIDLETIME)))
+      ClearHideIdle(sptr);
     if (!FlagHas(&setflags, FLAG_PARANOID) && !(IsOper(sptr) && HasPriv(sptr, PRIV_PARANOID)))
       ClearParanoid(sptr);
     /*

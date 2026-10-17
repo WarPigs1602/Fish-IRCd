@@ -192,6 +192,11 @@ int m_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
         continue;
       }
 
+      if (MyUser(sptr)) {
+        char modes[32];
+        channel_set_auto_modes(chptr, modes, sizeof(modes));
+      }
+
       joinbuf_join(&create, chptr, CHFL_CHANOP | CHFL_CHANNEL_MANAGER | delay_flag);
     } else if (find_member_link(chptr, sptr)) {
       continue; /* already on channel */

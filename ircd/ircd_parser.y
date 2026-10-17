@@ -226,6 +226,7 @@ static void free_slist(struct SLink **link) {
 %token DNS
 %token WEBIRC
 %token WEBSOCKET
+%token CLOAK
 %token CLOUDFLARE
 %token IPCHECK
 %token EXCEPT
@@ -942,7 +943,7 @@ portblock: PORT {
 };
 portitems: portitem portitems | portitem;
 portitem: portnumber | portvhost | portvhostnumber | portmask | portserver
-  | portwebirc | portwebsocket | portcloudflare | porthidden | porttls | tlsciphers
+  | portwebirc | portwebsocket | portcloudflare | portcloak | porthidden | porttls | tlsciphers
   | tlsverifypeer | tlssystemca | tlscertfile | tlscertdir;
 portnumber: PORT '=' address_family NUMBER ';'
 {
@@ -1034,6 +1035,14 @@ portcloudflare: CLOUDFLARE '=' YES ';'
 } | CLOUDFLARE '=' NO ';'
 {
   FlagClr(&listen_flags, LISTEN_CLOUDFLARE);
+};
+
+portcloak: CLOAK '=' YES ';'
+{
+  FlagSet(&listen_flags, LISTEN_CLOAK);
+} | CLOAK '=' NO ';'
+{
+  FlagClr(&listen_flags, LISTEN_CLOAK);
 };
 
 clientblock: CLIENT

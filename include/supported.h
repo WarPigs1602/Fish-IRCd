@@ -48,6 +48,7 @@
 
 #define FEATURES2 "MAXNICKLEN=%i" \
                 " TOPICLEN=%i" \
+                " BOT=B" \
                 " AWAYLEN=%i" \
                 " KICKLEN=%i" \
                 " CHANNELLEN=%i" \
@@ -74,4 +75,3 @@
                         feature_str(FEAT_CLIENTTAGDENY)
 
 #endif /* INCLUDED_supported_h */
-

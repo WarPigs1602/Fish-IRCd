@@ -166,6 +166,8 @@ void do_who(struct Client* sptr, struct Client* acptr, struct Channel* repchan,
       *(p1++) = 'G';
     else
       *(p1++) = 'H';
+    if (IsBot(acptr) || IsChannelService(acptr))
+      *(p1++) = 'B';
     if SeeOper(sptr,acptr)
       *(p1++) = '*';
     if (!chan) {

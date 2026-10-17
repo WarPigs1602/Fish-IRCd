@@ -405,6 +405,9 @@ extern void remove_user_from_all_channels(struct Client* cptr);
 extern int is_chan_op(struct Client *cptr, struct Channel *chptr);
 extern int is_zombie(struct Client *cptr, struct Channel *chptr);
 extern int has_voice(struct Client *cptr, struct Channel *chptr);
+extern unsigned int channel_set_auto_modes(struct Channel *chptr,
+                                           char *modes,
+                                           size_t modes_len);
 /*
    NOTE: pointer is compared, and not dereferenced, called by
    add_target with a void*, since targets could be anything,
