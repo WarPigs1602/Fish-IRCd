@@ -155,7 +155,9 @@ void sasl_check_capability(void)
 {
   /* Keep the advertised mechanism list in sync with the configuration. */
   cap_set_value(E_CAP_SASL, netconf_str(NETCONF_SASL_MECHANISMS));
-  cap_update_availability(E_CAP_SASL, sasl_available());
+  /* Advertise SASL as soon as a SASL server is configured, even while it is
+   * disconnected; AUTHENTICATE then fails with 904 until it is linked. */
+  cap_update_availability(E_CAP_SASL, *sasl_server() ? 1 : 0);
 }
 
 /** Config change callback for SASL-related configuration
@@ -175,7 +177,7 @@ static void sasl_config_callback(const char *key, const char *old_value, const c
   /* Re-notify cap-notify clients when the mechanism list changes while
    * SASL is available, so they learn the supported mechanisms. */
   if (ircd_strcmp(key, "sasl.mechanisms") == 0
-      && sasl_available()
+      && *sasl_server()
       && ircd_strcmp(old_value ? old_value : "",
                      new_value ? new_value : "") != 0)
     cap_new(E_CAP_SASL);
@@ -187,6 +189,7 @@ void sasl_init(void)
   config_register_callback("sasl.", sasl_config_callback);
   /* Initialize the SASL capability value from the configuration. */
   cap_set_value(E_CAP_SASL, netconf_str(NETCONF_SASL_MECHANISMS));
+  sasl_check_capability();
 }
 
 /** Compute hash bucket index for a given cookie. */

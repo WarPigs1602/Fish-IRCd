@@ -120,15 +120,16 @@ struct Client;
 #define MODE_TLSINSECURE   0x4000000    /**< +z TLS insecure network path */
 #define MODE_NONOTICE      0x8000000    /**< +N No channel notices */
 #define MODE_NOMULTITARGET 0x10000000   /**< +T No multiple targets */
+#define MODE_JOINFLOOD     0x10000      /**< +j Join flood protection */
 
 /** mode flags which take another parameter (With PARAmeterS)
  */
-#define MODE_WPARAS     (MODE_CHANOP|MODE_VOICE|MODE_BAN|MODE_KEY|MODE_LIMIT|MODE_APASS|MODE_UPASS)
+#define MODE_WPARAS     (MODE_CHANOP|MODE_VOICE|MODE_BAN|MODE_KEY|MODE_LIMIT|MODE_APASS|MODE_UPASS|MODE_JOINFLOOD)
 
 /** Available Channel modes */
-#define infochanmodes feature_bool(FEAT_OPLEVELS) ? "AbiklmnopstUvrDdRcCuNMZzT" : "biklmnopstvrDdRcCuNMZzT"
+#define infochanmodes feature_bool(FEAT_OPLEVELS) ? "AbijklmnopstUvrDdRcCuNMZzT" : "bijklmnopstvrDdRcCuNMZzT"
 /** Available Channel modes that take parameters */
-#define infochanmodeswithparams feature_bool(FEAT_OPLEVELS) ? "AbkloUv" : "bklov"
+#define infochanmodeswithparams feature_bool(FEAT_OPLEVELS) ? "AbjkloUv" : "bjklov"
 
 #define HoldChannel(x)          (!(x))
 /** name invisible */
@@ -247,6 +248,8 @@ struct Membership {
 struct Mode {
   unsigned int mode;
   unsigned int limit;
+  unsigned int jf_joins;   /**< +j: joins allowed within jf_secs */
+  unsigned int jf_secs;    /**< +j: length of the window in seconds */
   char key[KEYLEN + 1];
   char upass[KEYLEN + 1];
   char apass[KEYLEN + 1];
@@ -285,6 +288,8 @@ struct Channel {
   struct SLink*      invites;	   /**< List of invites on this channel */
   struct Ban*        banlist;      /**< List of bans on this channel */
   struct Mode        mode;	   /**< This channels mode */
+  time_t             jf_start;     /**< +j: start of current join window */
+  unsigned int       jf_count;     /**< +j: local joins in current window */
   char               topic[TOPICLEN + 1]; /**< Channels topic */
   char               topic_nick[NICKLEN + 1]; /**< Nick of the person who set
 						*  The topic
@@ -422,6 +427,7 @@ extern void list_set_default(void); /* this belongs elsewhere! */
 extern void RevealDelayedJoinIfNeeded(struct Client *sptr, struct Channel *chptr);
 extern void RevealDelayedJoin(struct Membership *member);
 extern void CheckDelayedJoins(struct Channel *chan);
+extern void channel_joinflood_note(struct Channel *chptr);
 
 extern void modebuf_init(struct ModeBuf *mbuf, struct Client *source,
 			 struct Client *connect, struct Channel *chan,

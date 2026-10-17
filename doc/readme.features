@@ -375,6 +375,23 @@ MAXBANS
 
 This is the maximum number of bans a user may set on a given channel.
 
+JOINFLOOD_MAX_JOINS
+ * Type: integer
+ * Default: 50
+
+Upper limit for the join count of the +j channel mode (+j joins:seconds).
+Larger values given by users are reduced to this limit.  Maximum 65535.
+
+JOINFLOOD_MAX_SECONDS
+ * Type: integer
+ * Default: 300
+
+Upper limit for the time window in seconds of the +j channel mode.
+Larger values given by users are reduced to this limit.  Maximum 65535.
+
+When the number of local joins within the window reaches the configured
+count, the channel is set +r.  Remove it again with MODE -r.
+
 MAXSILES
  * Type: integer
  * Default: 15

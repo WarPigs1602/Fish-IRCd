@@ -965,6 +965,18 @@ void channel_modes(struct Client *cptr, char *mbuf, char *pbuf, int buflen,
     previous_parameter = 1;
   }
 
+  if (chptr->mode.mode & MODE_JOINFLOOD) {
+    char jfbuf[24];
+
+    *mbuf++ = 'j';
+    if (previous_parameter)
+      strcat(pbuf, " ");
+    ircd_snprintf(0, jfbuf, sizeof(jfbuf), "%u:%u", chptr->mode.jf_joins,
+                  chptr->mode.jf_secs);
+    strcat(pbuf, jfbuf);
+    previous_parameter = 1;
+  }
+
   if (*chptr->mode.key) {
     *mbuf++ = 'k';
     if (previous_parameter)
@@ -1665,6 +1677,7 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
 /*  MODE_KEY,		'k', */
 /*  MODE_BAN,		'b', */
     MODE_LIMIT,		'l',
+    MODE_JOINFLOOD,	'j',
 /*  MODE_APASS,		'A', */
 /*  MODE_UPASS,		'U', */
     0x0, 0x0
@@ -1701,8 +1714,10 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
   int tmp;
 
   char limitbuf[20]; /* convert limits to strings */
+  char jfbuf[24]; /* join flood parameter, "joins:seconds" */
 
   unsigned int limitdel = MODE_LIMIT;
+  unsigned int jfdel = MODE_JOINFLOOD;
 
   assert(0 != mbuf);
 
@@ -1795,6 +1810,7 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
 
   /* Now go through the modes with arguments... */
   limitbuf[0] = '\0';
+  jfbuf[0] = '\0';
   for (i = 0; i < mbuf->mb_count; i++) {
     if (MB_TYPE(mbuf, i) & MODE_ADD) { /* adding or removing? */
       bufptr = addbuf;
@@ -1857,6 +1873,18 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
 	bufptr[(*bufptr_i)++] = 'l';
 	totalbuflen -= tmp + 1;
       }
+    } else if (MB_TYPE(mbuf, i) & MODE_JOINFLOOD) {
+      ircd_snprintf(0, jfbuf, sizeof(jfbuf), "%u:%u", MB_UINT(mbuf, i) >> 16,
+		    MB_UINT(mbuf, i) & 0xffff);
+
+      tmp = strlen(jfbuf);
+
+      if ((totalbuflen - tmp) <= 0) /* don't overflow buffer */
+	MB_TYPE(mbuf, i) |= MODE_SAVE; /* save for later */
+      else {
+	bufptr[(*bufptr_i)++] = 'j';
+	totalbuflen -= tmp + 1;
+      }
     }
   }
 
@@ -1914,6 +1942,10 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
       else if ((MB_TYPE(mbuf, i) & (MODE_ADD | MODE_LIMIT)) ==
 	       (MODE_ADD | MODE_LIMIT))
 	build_string(strptr, strptr_i, limitbuf, 0, ' ');
+
+      else if ((MB_TYPE(mbuf, i) & (MODE_ADD | MODE_JOINFLOOD)) ==
+	       (MODE_ADD | MODE_JOINFLOOD))
+	build_string(strptr, strptr_i, jfbuf, 0, ' ');
     }
 
     /* send the messages off to their destination */
@@ -1975,6 +2007,7 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
      * direction is the direction for it to be removed, though...
      */
     limitdel |= (mbuf->mb_dest & MODEBUF_DEST_BOUNCE) ? MODE_DEL : MODE_ADD;
+    jfdel |= (mbuf->mb_dest & MODEBUF_DEST_BOUNCE) ? MODE_DEL : MODE_ADD;
 
     for (i = 0; i < mbuf->mb_count; i++) {
       if (MB_TYPE(mbuf, i) & MODE_SAVE)
@@ -2011,6 +2044,9 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
        */
       else if ((MB_TYPE(mbuf, i) & limitdel) == limitdel)
 	build_string(strptr, strptr_i, limitbuf, 0, ' ');
+
+      else if ((MB_TYPE(mbuf, i) & jfdel) == jfdel)
+	build_string(strptr, strptr_i, jfbuf, 0, ' ');
     }
 
     /* we were told to deop the source */
@@ -2170,7 +2206,7 @@ modebuf_mode_uint(struct ModeBuf *mbuf, unsigned int mode, unsigned int uint)
   assert(0 != mbuf);
   assert(0 != (mode & (MODE_ADD | MODE_DEL)));
 
-  if (mode == (MODE_LIMIT | MODE_DEL)) {
+  if (mode == (MODE_LIMIT | MODE_DEL) || mode == (MODE_JOINFLOOD | MODE_DEL)) {
       mbuf->mb_rem |= mode;
       return;
   }
@@ -2271,6 +2307,7 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
     MODE_REGISTERED,	'R',
 /*  MODE_BAN,		'b', */
     MODE_LIMIT,		'l',
+    MODE_JOINFLOOD,	'j',
     MODE_REGONLY,	'r',
     MODE_DELJOINS,      'D',
     MODE_NOCOLOR,       'c',
@@ -2285,7 +2322,7 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
   unsigned int add;
   int i, bufpos = 0, len;
   int *flag_p;
-  char *key = 0, limitbuf[20];
+  char *key = 0, limitbuf[20], jfbuf[24];
   char *apass = 0, *upass = 0;
 
   assert(0 != mbuf);
@@ -2293,17 +2330,21 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
 
   buf[0] = '\0';
   limitbuf[0] = '\0';
+  jfbuf[0] = '\0';
 
-  add = mbuf->mb_add & ~(MODE_KEY | MODE_LIMIT | MODE_APASS | MODE_UPASS);
+  add = mbuf->mb_add & ~(MODE_KEY | MODE_LIMIT | MODE_JOINFLOOD | MODE_APASS | MODE_UPASS);
 
   for (i = 0; i < mbuf->mb_count; i++) { /* find keys and limits */
     if (MB_TYPE(mbuf, i) & MODE_ADD) {
-      add |= MB_TYPE(mbuf, i) & (MODE_KEY | MODE_LIMIT | MODE_APASS | MODE_UPASS);
+      add |= MB_TYPE(mbuf, i) & (MODE_KEY | MODE_LIMIT | MODE_JOINFLOOD | MODE_APASS | MODE_UPASS);
 
       if (MB_TYPE(mbuf, i) & MODE_KEY) /* keep strings */
 	key = MB_STRING(mbuf, i);
       else if (MB_TYPE(mbuf, i) & MODE_LIMIT)
 	ircd_snprintf(0, limitbuf, sizeof(limitbuf), "%u", MB_UINT(mbuf, i));
+      else if (MB_TYPE(mbuf, i) & MODE_JOINFLOOD)
+	ircd_snprintf(0, jfbuf, sizeof(jfbuf), "%u:%u", MB_UINT(mbuf, i) >> 16,
+		      MB_UINT(mbuf, i) & 0xffff);
       else if (MB_TYPE(mbuf, i) & MODE_UPASS)
 	upass = MB_STRING(mbuf, i);
       else if (MB_TYPE(mbuf, i) & MODE_APASS)
@@ -2325,6 +2366,8 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
       build_string(buf, &bufpos, key, 0, ' ');
     else if (buf[i] == 'l')
       build_string(buf, &bufpos, limitbuf, 0, ' ');
+    else if (buf[i] == 'j')
+      build_string(buf, &bufpos, jfbuf, 0, ' ');
     else if (buf[i] == 'U')
       build_string(buf, &bufpos, upass, 0, ' ');
     else if (buf[i] == 'A')
@@ -2377,6 +2420,7 @@ mode_invite_clear(struct Channel *chan)
 #define DONE_KEY_DEL    0x80    /**< We've removed the key */
 #define DONE_UPASS_DEL  0x100   /**< We've removed the user pass */
 #define DONE_APASS_DEL  0x200   /**< We've removed the admin pass */
+#define DONE_JOINFLOOD  0x400   /**< We've set or removed the join flood limit */
 
 struct ParseState {
   struct ModeBuf *mbuf;
@@ -2486,6 +2530,96 @@ mode_parse_limit(struct ParseState *state, int *flag_p)
     } else {
       state->chptr->mode.mode &= ~flag_p[0];
       state->chptr->mode.limit = 0;
+    }
+  }
+}
+
+/** Parse a join flood setting ("joins:seconds").
+ * Values above the configured maximum are clamped to it.
+ *
+ * @param state		Parsing state object.
+ * @param flag_p	Flag table entry for +j.
+ */
+static void
+mode_parse_joinflood(struct ParseState *state, int *flag_p)
+{
+  unsigned int joins, secs, packed, max_joins, max_secs;
+  char *arg, *colon;
+
+  if (state->dir == MODE_ADD) {
+    if (MyUser(state->sptr) && state->max_args <= 0) /* too many args? */
+      return;
+
+    if (state->parc <= 0) { /* warn if not enough args */
+      if (MyUser(state->sptr))
+	need_more_params(state->sptr, "MODE +j");
+      return;
+    }
+
+    arg = state->parv[state->args_used++];
+    state->parc--;
+    state->max_args--;
+
+    colon = strchr(arg, ':');
+    if (!colon)
+      return;
+    joins = strtoul(arg, 0, 10);
+    secs = strtoul(colon + 1, 0, 10);
+    if (!joins || !secs)
+      return;
+
+    max_joins = feature_int(FEAT_JOINFLOOD_MAX_JOINS);
+    max_secs = feature_int(FEAT_JOINFLOOD_MAX_SECONDS);
+    if (max_joins < 1 || max_joins > 0xffff)
+      max_joins = 0xffff;
+    if (max_secs < 1 || max_secs > 0xffff)
+      max_secs = 0xffff;
+    if (joins > max_joins)
+      joins = max_joins;
+    if (secs > max_secs)
+      secs = max_secs;
+
+    if (!(state->flags & MODE_PARSE_WIPEOUT) &&
+	(state->chptr->mode.mode & MODE_JOINFLOOD) &&
+	joins == state->chptr->mode.jf_joins &&
+	secs == state->chptr->mode.jf_secs)
+      return;
+  } else {
+    joins = state->chptr->mode.jf_joins;
+    secs = state->chptr->mode.jf_secs;
+  }
+  packed = (joins << 16) | secs;
+
+  /* If they're not an oper, they can't change modes */
+  if (state->flags & (MODE_PARSE_NOTOPER | MODE_PARSE_NOTMEMBER)) {
+    send_notoper(state);
+    return;
+  }
+
+  /* Can't remove a setting that's not there */
+  if (state->dir == MODE_DEL && !(state->chptr->mode.mode & MODE_JOINFLOOD))
+    return;
+
+  if (state->done & DONE_JOINFLOOD) /* allow it to be set only once */
+    return;
+  state->done |= DONE_JOINFLOOD;
+
+  if (!state->mbuf)
+    return;
+
+  modebuf_mode_uint(state->mbuf, state->dir | flag_p[0], packed);
+
+  if (state->flags & MODE_PARSE_SET) {
+    if (state->dir & MODE_ADD) {
+      state->chptr->mode.mode |= flag_p[0];
+      state->chptr->mode.jf_joins = joins;
+      state->chptr->mode.jf_secs = secs;
+      state->chptr->jf_start = 0;
+      state->chptr->jf_count = 0;
+    } else {
+      state->chptr->mode.mode &= ~flag_p[0];
+      state->chptr->mode.jf_joins = 0;
+      state->chptr->mode.jf_secs = 0;
     }
   }
 }
@@ -3419,6 +3553,7 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
     MODE_REGISTERED,	'R',
     MODE_BAN,		'b',
     MODE_LIMIT,		'l',
+    MODE_JOINFLOOD,	'j',
     MODE_REGONLY,	'r',
     MODE_DELJOINS,      'D',
     MODE_NOCOLOR,       'c',
@@ -3492,6 +3627,10 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
 
       case 'l': /* deal with limits */
 	mode_parse_limit(&state, flag_p);
+	break;
+
+      case 'j': /* deal with join flood protection */
+	mode_parse_joinflood(&state, flag_p);
 	break;
 
       case 'k': /* deal with keys */
@@ -3615,6 +3754,9 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
     if (state.chptr->mode.limit && !(state.done & DONE_LIMIT))
       modebuf_mode_uint(state.mbuf, MODE_DEL | MODE_LIMIT,
 			state.chptr->mode.limit);
+    if ((state.chptr->mode.mode & MODE_JOINFLOOD) &&
+	!(state.done & DONE_JOINFLOOD))
+      modebuf_mode_uint(state.mbuf, MODE_DEL | MODE_JOINFLOOD, 0);
     if (*state.chptr->mode.key && !(state.done & DONE_KEY_DEL))
       modebuf_mode_string(state.mbuf, MODE_DEL | MODE_KEY,
 			  state.chptr->mode.key, 0);
@@ -3895,6 +4037,36 @@ void RevealDelayedJoin(struct Membership *member)
     sendcmdto_capflag_channel_butserv_butone(member->user, CMD_AWAY, member->channel,
       NULL, 0, CAP_AWAYNOTIFY, 0, ":%s", cli_user(member->user)->away);
   CheckDelayedJoins(member->channel);
+}
+
+/** Count a local join on a +j channel and set +r once the limit is reached.
+ * @param chptr Channel that was joined.
+ */
+void channel_joinflood_note(struct Channel *chptr)
+{
+  struct ModeBuf mbuf;
+  time_t now = TStime();
+
+  if (!(chptr->mode.mode & MODE_JOINFLOOD)
+      || (chptr->mode.mode & MODE_REGONLY))
+    return;
+
+  if (!chptr->jf_start || now - chptr->jf_start >= (time_t)chptr->mode.jf_secs) {
+    chptr->jf_start = now;
+    chptr->jf_count = 0;
+  }
+  if (++chptr->jf_count < chptr->mode.jf_joins)
+    return;
+
+  chptr->jf_start = 0;
+  chptr->jf_count = 0;
+  chptr->mode.mode |= MODE_REGONLY;
+  modebuf_init(&mbuf, &me, 0, chptr, MODEBUF_DEST_CHANNEL | MODEBUF_DEST_SERVER);
+  modebuf_mode(&mbuf, MODE_ADD | MODE_REGONLY);
+  modebuf_flush(&mbuf);
+  sendto_opmask_butone(0, SNO_OLDSNO, "Join flood on %H (%u joins in %us): "
+		       "setting +r", chptr, chptr->mode.jf_joins,
+		       chptr->mode.jf_secs);
 }
 
 /* CheckDelayedJoins: checks and clear +d if necessary */

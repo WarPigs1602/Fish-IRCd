@@ -289,6 +289,7 @@ int m_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
       }
 
       joinbuf_join(&join, chptr, flags | delay_flag);
+      channel_joinflood_note(chptr);
       if (flags & CHFL_CHANOP) {
         struct ModeBuf mbuf;
 	/* Always let the server op him: this is needed on a net with older servers
@@ -464,6 +465,7 @@ int ms_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
     }
 
     joinbuf_join(&join, chptr, flags);
+    channel_joinflood_note(chptr); /* remote joins count towards +j too */
   }
 
   joinbuf_flush(&join); /* flush joins... */
