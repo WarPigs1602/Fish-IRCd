@@ -36,6 +36,7 @@
 
 struct SLink;
 struct Client;
+struct HistEntry;
 
 /*
  * General defines
@@ -121,15 +122,16 @@ struct Client;
 #define MODE_NONOTICE      0x8000000    /**< +N No channel notices */
 #define MODE_NOMULTITARGET 0x10000000   /**< +T No multiple targets */
 #define MODE_JOINFLOOD     0x10000      /**< +j Join flood protection */
+#define MODE_HISTORY       0x80000000   /**< +H Channel history lines:hours */
 
 /** mode flags which take another parameter (With PARAmeterS)
  */
-#define MODE_WPARAS     (MODE_CHANOP|MODE_VOICE|MODE_BAN|MODE_KEY|MODE_LIMIT|MODE_APASS|MODE_UPASS|MODE_JOINFLOOD)
+#define MODE_WPARAS     (MODE_CHANOP|MODE_VOICE|MODE_BAN|MODE_KEY|MODE_LIMIT|MODE_APASS|MODE_UPASS|MODE_JOINFLOOD|MODE_HISTORY)
 
 /** Available Channel modes */
-#define infochanmodes feature_bool(FEAT_OPLEVELS) ? "AbijklmnopstUvrDdRcCuNMZzT" : "bijklmnopstvrDdRcCuNMZzT"
+#define infochanmodes feature_bool(FEAT_OPLEVELS) ? "AbHijklmnopstUvrDdRcCuNMZzT" : "bHijklmnopstvrDdRcCuNMZzT"
 /** Available Channel modes that take parameters */
-#define infochanmodeswithparams feature_bool(FEAT_OPLEVELS) ? "AbjkloUv" : "bjklov"
+#define infochanmodeswithparams feature_bool(FEAT_OPLEVELS) ? "AbHjkloUv" : "bHjklov"
 
 #define HoldChannel(x)          (!(x))
 /** name invisible */
@@ -250,6 +252,8 @@ struct Mode {
   unsigned int limit;
   unsigned int jf_joins;   /**< +j: joins allowed within jf_secs */
   unsigned int jf_secs;    /**< +j: length of the window in seconds */
+  unsigned int hist_lines; /**< +H: number of lines kept */
+  unsigned int hist_hours; /**< +H: maximum age in hours */
   char key[KEYLEN + 1];
   char upass[KEYLEN + 1];
   char apass[KEYLEN + 1];
@@ -290,6 +294,9 @@ struct Channel {
   struct Mode        mode;	   /**< This channels mode */
   time_t             jf_start;     /**< +j: start of current join window */
   unsigned int       jf_count;     /**< +j: local joins in current window */
+  struct HistEntry*  hist_head;    /**< +H: oldest stored message */
+  struct HistEntry*  hist_tail;    /**< +H: newest stored message */
+  unsigned int       hist_count;   /**< +H: number of stored messages */
   char               topic[TOPICLEN + 1]; /**< Channels topic */
   char               topic_nick[NICKLEN + 1]; /**< Nick of the person who set
 						*  The topic

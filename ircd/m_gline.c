@@ -145,6 +145,93 @@ ms_gline(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
     flags |= GLINE_OPERFORCE; /* assume oper had WIDE_GLINE */
   }
 
+  /* newserv/snircd 1.3.5 destroy form: "* %-<mask> <expire> <lastmod> :<reason>"
+   * removes the whole G-line record on every server. */
+  if (*mask == '%') {
+    time_t dlastmod = parc > 4 ? atoi(parv[4]) : 0;
+    char *dreason = parc > 5 ? parv[parc - 1] : 0;
+
+    mask++;
+    if (*mask == '-' || *mask == '+')
+      mask++;
+    if (mask[0] == '\0')
+      return need_more_params(sptr, "GLINE");
+
+    if (!(target[0] == '*' && target[1] == '\0')) {
+      if (!(acptr = FindNServer(target)))
+	return 0; /* no such server */
+      if (!IsMe(acptr)) { /* manually propagate */
+	sendcmdto_one(sptr, CMD_GLINE, acptr, "%C %s", acptr, parv[2]);
+	return 0;
+      }
+    }
+
+    agline = gline_find(mask, GLINE_ANY | GLINE_EXACT);
+    if (!agline) { /* nothing to remove here; still tell the others */
+      sendcmdto_serv_butone(sptr, CMD_GLINE, cptr, "* %%-%s %Tu %Tu :%s", mask,
+			    parc > 3 ? (time_t)atoi(parv[3]) : (time_t)0,
+			    dlastmod, dreason ? dreason : "");
+      return 0;
+    }
+    if (!GlineIsLocal(agline) && dlastmod && GlineLastMod(agline) > dlastmod)
+      return IsBurstOrBurstAck(cptr) ? 0 : gline_resend(cptr, agline);
+
+    return gline_destroy_global(cptr, sptr, agline, dlastmod, dreason);
+  }
+
+  /* Legacy Uworld forms without lastmod (ircu/snircd compatible):
+   *   * -<mask>
+   *   * +<mask> <expire> :<reason>
+   * Distinguished from the modern "+<mask> <expire> <lastmod>" form by a
+   * non-numeric last parameter.
+   */
+  if ((parc == 3 && *mask == '-') ||
+      (parc == 5 && *mask == '+' && parv[4][strspn(parv[4], "0123456789")])) {
+    int add = (*mask == '+');
+
+    if (!find_conf_byhost(cli_confs(cptr), cli_name(sptr), CONF_UWORLD))
+      return need_more_params(sptr, "GLINE");
+
+    flags |= GLINE_FORCE;
+    mask++;
+    if (mask[0] == '\0')
+      return need_more_params(sptr, "GLINE");
+
+    if (!(target[0] == '*' && target[1] == '\0')) {
+      if (!(acptr = FindNServer(target)) && !(acptr = SeekServer(target)))
+	return 0; /* no such server */
+
+      if (!IsMe(acptr)) { /* manually propagate */
+	if (add)
+	  sendcmdto_one(sptr, CMD_GLINE, acptr, "%C %s%s %s :%s", acptr,
+			flags & GLINE_OPERFORCE ? "!" : "", parv[2] +
+			(flags & GLINE_OPERFORCE ? 1 : 0), parv[3], parv[4]);
+	else
+	  sendcmdto_one(sptr, CMD_GLINE, acptr, "%C %s", acptr, parv[2]);
+	return 0;
+      }
+    }
+
+    agline = gline_find(mask, GLINE_ANY | GLINE_EXACT);
+
+    if (agline && GlineIsLocal(agline))
+      gline_free(agline), agline = 0; /* global over local */
+
+    if (!add) {
+      if (agline)
+	return gline_deactivate(cptr, sptr, agline, 0, flags);
+      /* removing a G-line we don't have; propagate the removal anyway */
+      sendcmdto_serv_butone(sptr, CMD_GLINE, cptr, "* -%s", mask);
+      return 0;
+    }
+
+    if (agline)
+      return gline_activate(cptr, sptr, agline, 0, flags);
+
+    return gline_add(cptr, sptr, mask, parv[4], abs_expire(atoi(parv[3])),
+		     0, 0, flags | GLINE_GLOBAL | GLINE_ACTIVE);
+  }
+
   switch (*mask) { /* handle +, -, <, and > */
   case '+': /* activate the G-line */
     action = GLINE_ACTIVATE;

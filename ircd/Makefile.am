@@ -20,6 +20,7 @@ ircd_SOURCES = \
 	fileio.c \
 	gline.c \
 	hash.c \
+	history.c \
 	ircd.c \
 	ircd_alloc.c \
 	ircd_crypt.c \
@@ -42,6 +43,10 @@ ircd_SOURCES = \
 	m_admin.c \
 	m_asll.c \
 	m_away.c \
+	m_batch.c \
+	m_multiline.c \
+	capture.c \
+	m_chathistory.c \
 	m_burst.c \
 	m_cap.c \
 	m_check.c \

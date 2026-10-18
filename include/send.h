@@ -45,6 +45,11 @@ extern void send_queued(struct Client *to);
  */
 extern void sendrawto_one(struct Client *to, const char *pattern, ...);
 
+/* Like sendrawto_one, but with an explicit tag section ("@k=v;k2=v2 ")
+ * replacing the automatically generated tags. */
+extern void sendtaggedto_one(struct Client *to, const char *tags,
+                             const char *pattern, ...);
+
 /* Send a command to one client */
 extern void sendcmdto_one(struct Client *from, const char *cmd,
 			  const char *tok, struct Client *to,

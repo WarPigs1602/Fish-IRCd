@@ -789,7 +789,8 @@ int check_target_limit(struct Client *sptr, struct Client *acptr,
     return 1;
   }
   else {
-    cli_nexttarget(sptr) += TARGET_DELAY;
+    /* Bots (+B) get half the new-target delay. */
+    cli_nexttarget(sptr) += IsBot(sptr) ? (TARGET_DELAY + 1) / 2 : TARGET_DELAY;
     if (cli_nexttarget(sptr) < CurrentTime - (TARGET_DELAY * (MAXTARGETS - 1)))
       cli_nexttarget(sptr) = CurrentTime - (TARGET_DELAY * (MAXTARGETS - 1));
   }

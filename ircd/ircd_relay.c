@@ -49,6 +49,7 @@
 #include "channel.h"
 #include "client.h"
 #include "hash.h"
+#include "history.h"
 #include "ircd.h"
 #include "ircd_chattr.h"
 #include "ircd_features.h"
@@ -144,6 +145,7 @@ void relay_channel_message(struct Client* sptr, const char* name, const char* te
   RevealDelayedJoinIfNeeded(sptr, chptr);
   sendcmdto_channel_butone(sptr, CMD_PRIVATE, chptr, cli_from(sptr),
 			   SKIP_DEAF | SKIP_BURST, "%H :%s", chptr, text);
+  history_record(chptr, sptr, 0, text);
 
   if (CapHas(cli_active(sptr), CAP_ECHOMESSAGE))
     sendcmdto_one(sptr, CMD_PRIVATE, cli_from(sptr), "%H :%s", chptr, text);
@@ -213,6 +215,7 @@ void relay_channel_notice(struct Client* sptr, const char* name, const char* tex
   RevealDelayedJoinIfNeeded(sptr, chptr);
   sendcmdto_channel_butone(sptr, CMD_NOTICE, chptr, cli_from(sptr),
 			   SKIP_DEAF | SKIP_BURST, "%H :%s", chptr, text);
+  history_record(chptr, sptr, 1, text);
 
   if (CapHas(cli_active(sptr), CAP_ECHOMESSAGE))
     sendcmdto_one(sptr, CMD_NOTICE, cli_from(sptr), "%H :%s", chptr, text);
@@ -243,6 +246,7 @@ void server_relay_channel_message(struct Client* sptr, const char* name, const c
   if (client_can_send_to_channel(sptr, chptr, 1) || IsChannelService(sptr)) {
     sendcmdto_channel_butone(sptr, CMD_PRIVATE, chptr, cli_from(sptr),
 			     SKIP_DEAF | SKIP_BURST, "%H :%s", chptr, text);
+    history_record(chptr, sptr, 0, text);
   }
   else
     send_reply(sptr, ERR_CANNOTSENDTOCHAN, chptr->chname);
@@ -271,6 +275,7 @@ void server_relay_channel_notice(struct Client* sptr, const char* name, const ch
   if (client_can_send_to_channel(sptr, chptr, 1) || IsChannelService(sptr)) {
     sendcmdto_channel_butone(sptr, CMD_NOTICE, chptr, cli_from(sptr),
 			     SKIP_DEAF | SKIP_BURST, "%H :%s", chptr, text);
+    history_record(chptr, sptr, 1, text);
   }
 }
 

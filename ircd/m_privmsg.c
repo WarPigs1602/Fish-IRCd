@@ -91,6 +91,7 @@
 #include "ircd_string.h"
 #include "match.h"
 #include "msg.h"
+#include "multiline.h"
 #include "numeric.h"
 #include "send.h"
 
@@ -108,6 +109,8 @@ int m_privmsg(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
   int             count;
   char*           vector[MAXTARGETS];
 
+  if (multiline_intercept(sptr, 0, parc, parv))
+    return 0;
   assert(0 != cptr);
   assert(cptr == sptr);
   assert(0 != cli_user(sptr));
@@ -198,6 +201,8 @@ int mo_privmsg(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
   int             i;
   int             count;
   char*           vector[MAXTARGETS];
+  if (multiline_intercept(sptr, 0, parc, parv))
+    return 0;
   assert(0 != cptr);
   assert(cptr == sptr);
   assert(0 != cli_user(sptr));

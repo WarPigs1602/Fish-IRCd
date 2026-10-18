@@ -72,7 +72,7 @@ static struct NetConfDesc {
 } netconf_descs[] = {
   /* SASL configuration options */
   NC_S(SASL_SERVER, "sasl.server", ""),
-  NC_S(SASL_MECHANISMS, "sasl.mechanisms", ""),
+  NC_S(SASL_MECHANISMS, "sasl.mechanisms", "PLAIN,SCRAM-SHA-256,SCRAM-SHA-512"),
   NC_I(SASL_TIMEOUT, "sasl.timeout", 30),
 
   /* S:line related settings */

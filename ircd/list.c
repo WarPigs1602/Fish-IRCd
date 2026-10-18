@@ -33,6 +33,7 @@
 #include "ircd_string.h"
 #include "listener.h"
 #include "match.h"
+#include "multiline.h"
 #include "numeric.h"
 #include "res.h"
 #include "s_auth.h"
@@ -171,6 +172,8 @@ static void dealloc_connection(struct Connection* con)
   /* MsgQClear frees MsgBufs; drop TLS mid-message rexmit into them. */
   con->con_rexmit = NULL;
   con->con_rexmit_len = 0;
+  multiline_free(con->con_mlbatch);
+  con->con_mlbatch = NULL;
   client_drop_sendq(con);
   DBufClear(&(con_recvQ(con)));
   if (con_listener(con))

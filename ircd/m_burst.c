@@ -125,6 +125,8 @@ netride_modes(int parc, char **parv, const char *curr_key)
         result |= MODE_KEY;
       break;
     case 'l':
+    case 'j':
+    case 'H':
       ++parv;
       break;
     case 'r':
@@ -436,8 +438,9 @@ int ms_burst(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
       {
 	struct Client *acptr;
 	char *nicklist = parv[param], *p = 0, *nick, *ptr;
-	int current_mode, last_mode, base_mode;
+	int current_mode, member_mode, last_mode, base_mode;
 	int oplevel = -1;	/* Mark first field with digits: means the same as 'o' (but with level). */
+	int member_oplevel;
 	int last_oplevel = 0;
 	struct Membership* member;
 
@@ -517,6 +520,14 @@ int ms_burst(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
 	  if (!(acptr = findNUser(nick)) || cli_from(acptr) != cptr)
 	    continue; /* ignore this client */
 
+	  member_mode = current_mode;
+	  member_oplevel = oplevel;
+	  if (IsChannelService(acptr)) {
+	    member_mode = (member_mode & ~CHFL_DEOPPED) | CHFL_CHANOP;
+	    if (!(current_mode & CHFL_CHANOP))
+	      member_oplevel = MAXOPLEVEL;
+	  }
+
 	  /* Build nick buffer */
 	  nickstr[nickpos] = nickpos ? ',' : ' '; /* first char */
 	  nickpos++;
@@ -524,30 +535,30 @@ int ms_burst(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
 	  for (ptr = nick; *ptr; ptr++) /* store nick */
 	    nickstr[nickpos++] = *ptr;
 
-	  if (current_mode != last_mode) { /* if mode changed... */
-	    last_mode = current_mode;
-	    last_oplevel = oplevel;
+	  if (member_mode != last_mode) { /* if mode changed... */
+	    last_mode = member_mode;
+	    last_oplevel = member_oplevel;
 
 	    nickstr[nickpos++] = ':'; /* add a specifier */
-	    if (current_mode & CHFL_VOICE)
+	    if (member_mode & CHFL_VOICE)
 	      nickstr[nickpos++] = 'v';
-	    if (current_mode & CHFL_CHANOP)
+	    if (member_mode & CHFL_CHANOP)
             {
-              if (oplevel != MAXOPLEVEL)
-	        nickpos += ircd_snprintf(0, nickstr + nickpos, sizeof(nickstr) - nickpos, "%u", oplevel);
+              if (member_oplevel != MAXOPLEVEL)
+	        nickpos += ircd_snprintf(0, nickstr + nickpos, sizeof(nickstr) - nickpos, "%u", member_oplevel);
               else
                 nickstr[nickpos++] = 'o';
             }
-	  } else if (current_mode & CHFL_CHANOP && oplevel != last_oplevel) { /* if just op level changed... */
+	  } else if (member_mode & CHFL_CHANOP && member_oplevel != last_oplevel) { /* if just op level changed... */
 	    nickstr[nickpos++] = ':'; /* add a specifier */
-	    nickpos += ircd_snprintf(0, nickstr + nickpos, sizeof(nickstr) - nickpos, "%u", oplevel - last_oplevel);
-            last_oplevel = oplevel;
+	    nickpos += ircd_snprintf(0, nickstr + nickpos, sizeof(nickstr) - nickpos, "%u", member_oplevel - last_oplevel);
+            last_oplevel = member_oplevel;
 	  }
 
 	  if (!(member = find_member_link(chptr, acptr)))
 	  {
-	    add_user_to_channel(chptr, acptr, current_mode, oplevel);
-	    if (!(current_mode & CHFL_DELAYED)) {
+	    add_user_to_channel(chptr, acptr, member_mode, member_oplevel);
+	    if (!(member_mode & CHFL_DELAYED)) {
 	      sendjointo_channel_butserv(acptr, chptr, 0, 0);
               if (cli_user(acptr)->away)
                 sendcmdto_capflag_channel_butserv_butone(acptr, CMD_AWAY, chptr,
@@ -563,8 +574,8 @@ int ms_burst(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
 	    if (member->status & CHFL_VOICE)
 	      member->status |= CHFL_BURST_ALREADY_VOICED;
 	    /* Synchronize with the burst. */
-	    member->status |= CHFL_BURST_JOINED | (current_mode & (CHFL_CHANOP|CHFL_VOICE));
-	    SetOpLevel(member, oplevel);
+	    member->status |= CHFL_BURST_JOINED | (member_mode & (CHFL_CHANOP|CHFL_VOICE));
+	    SetOpLevel(member, member_oplevel);
 	  }
 	}
       }
@@ -597,13 +608,20 @@ int ms_burst(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
 	if ((member->status & CHFL_VOICE) && !(member->status & CHFL_BURST_ALREADY_VOICED))
 	  modebuf_mode_client(mbuf, MODE_ADD | CHFL_VOICE, member->user, OpLevel(member));
       } else if (parse_flags & MODE_PARSE_WIPEOUT) { /* wipeout old ops */
-	if (member->status & CHFL_CHANOP)
+	if (IsChannelService(member->user) && !(member->status & CHFL_CHANOP))
+	  modebuf_mode_client(mbuf, MODE_ADD | CHFL_CHANOP, member->user, MAXOPLEVEL);
+	if ((member->status & CHFL_CHANOP)
+            && !IsChannelService(member->user))
 	  modebuf_mode_client(mbuf, MODE_DEL | CHFL_CHANOP, member->user, OpLevel(member));
 	if (member->status & CHFL_VOICE)
 	  modebuf_mode_client(mbuf, MODE_DEL | CHFL_VOICE, member->user, OpLevel(member));
-	member->status = (member->status
-                          & ~(CHFL_CHANNEL_MANAGER | CHFL_CHANOP | CHFL_VOICE))
-			 | CHFL_DEOPPED;
+	if (IsChannelService(member->user))
+	  member->status = (member->status & ~(CHFL_CHANNEL_MANAGER | CHFL_VOICE))
+                           | CHFL_CHANOP;
+	else
+	  member->status = (member->status
+                            & ~(CHFL_CHANNEL_MANAGER | CHFL_CHANOP | CHFL_VOICE))
+			   | CHFL_DEOPPED;
       }
     }
 

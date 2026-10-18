@@ -198,8 +198,11 @@ int m_sasl(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
 
   /* Is this the initial authentication challenge? */
   if (!cli_sasl(cptr)) {
-    if (!sasl_mechanism_supported(parv[1]))
-      return send_reply(cptr, RPL_SASLMECHS, netconf_str(NETCONF_SASL_MECHANISMS));
+    if (!sasl_mechanism_supported(parv[1])) {
+      /* IRCv3.2: 908 lists the mechanisms, then 904 reports the failure. */
+      send_reply(cptr, RPL_SASLMECHS, netconf_str(NETCONF_SASL_MECHANISMS));
+      return send_reply(cptr, ERR_SASLFAIL, "SASL authentication failed");
+    }
 
     do {
       ++routing_ticker;

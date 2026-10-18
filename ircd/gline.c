@@ -292,8 +292,9 @@ make_gline(char *nick, char *user, char *host, char *reason, time_t expire,
 }
 
 /** Check local clients against a new G-line.
- * If the G-line is inactive or a badchan, return immediately.
- * Otherwise, if any users match it, disconnect them.
+ * If the G-line is inactive, return immediately.
+ * Otherwise, if any users match it, disconnect them (or, for a badchan,
+ * kick local non-opers from the matching channels).
  * @param[in] cptr Peer connect that sent the G-line.
  * @param[in] sptr Client that originated the G-line.
  * @param[in] gline New G-line to check.
@@ -308,10 +309,33 @@ do_gline(struct Client *cptr, struct Client *sptr, struct Gline *gline)
   if (feature_bool(FEAT_DISABLE_GLINES))
     return 0; /* G-lines are disabled */
 
-  if (GlineIsBadChan(gline)) /* no action taken on badchan glines */
-    return 0;
   if (!GlineIsActive(gline)) /* no action taken on inactive glines */
     return 0;
+
+  if (GlineIsBadChan(gline)) {
+    /* Kick local non-oper members out of every matching channel. */
+    struct Channel *chptr, *nchptr;
+    struct Membership *member, *nmember;
+
+    for (chptr = GlobalChannelList; chptr; chptr = nchptr) {
+      nchptr = chptr->next;
+      if (match(gline->gl_user, chptr->chname))
+        continue;
+      for (member = chptr->members; member; member = nmember) {
+        nmember = member->next_member;
+        if (!MyUser(member->user) || IsZombie(member) ||
+            IsAnOper(member->user))
+          continue;
+        sendcmdto_serv_butone(&me, CMD_KICK, NULL, "%H %C :Badchanneled (%s)",
+                              chptr, member->user, gline->gl_reason);
+        sendcmdto_channel_butserv_butone(&me, CMD_KICK, chptr, NULL, 0,
+                                         "%H %C :Badchanneled (%s)", chptr,
+                                         member->user, gline->gl_reason);
+        make_zombie(member, member->user, &me, &me, chptr);
+      }
+    }
+    return 0;
+  }
 
   for (fd = HighestFd; fd >= 0; --fd) {
     /*
@@ -332,7 +356,7 @@ do_gline(struct Client *cptr, struct Client *sptr, struct Gline *gline)
             match(gline->gl_nick, cli_name(acptr)) != 0)
           continue;
 
-        if (match(gline->gl_user, (cli_user(acptr))->username) != 0)
+        if (match(gline->gl_user, (cli_user(acptr))->realusername) != 0)
 	  continue;
 
         if (GlineIsIpMask(gline)) {
@@ -446,7 +470,28 @@ gline_propagate(struct Client *cptr, struct Client *sptr, struct Gline *gline)
   if (GlineIsLocal(gline))
     return 0;
 
-  assert(gline->gl_lastmod);
+  /* Uworld-set G-lines have no lastmod; users never originate them. */
+  if (!gline->gl_lastmod) {
+    if (IsUser(sptr))
+      return 0;
+
+    if (GlineIsRemActive(gline))
+      sendcmdto_serv_butone(sptr, CMD_GLINE, cptr, "* +%s%s%s%s%s %Tu :%s",
+			    gline->gl_nick ? gline->gl_nick : "",
+			    gline->gl_nick ? "!" : "",
+			    gline->gl_user,
+			    gline->gl_host ? "@" : "",
+			    gline->gl_host ? gline->gl_host : "",
+			    gline->gl_expire - TStime(), gline->gl_reason);
+    else
+      sendcmdto_serv_butone(sptr, CMD_GLINE, cptr, "* -%s%s%s%s%s",
+			    gline->gl_nick ? gline->gl_nick : "",
+			    gline->gl_nick ? "!" : "",
+			    gline->gl_user,
+			    gline->gl_host ? "@" : "",
+			    gline->gl_host ? gline->gl_host : "");
+    return 0;
+  }
 
   sendcmdto_serv_butone(sptr, CMD_GLINE, cptr, "* %c%s%s%s%s%s %Tu %Tu %Tu :%s",
 			GlineIsRemActive(gline) ? '+' : '-',
@@ -1056,6 +1101,51 @@ gline_destroy(struct Client *cptr, struct Client *sptr, struct Gline *gline)
   return 0; /* convenience return */
 }
 
+/** Destroy a global G-line record (newserv "%-mask" form) and propagate it.
+ * @param[in] cptr Peer that gave us the message.
+ * @param[in] sptr Server or client that initiated the destruction.
+ * @param[in] gline G-line to destroy.
+ * @param[in] lastmod Last modification time sent with the request.
+ * @param[in] reason Reason sent with the request.
+ * @return Zero.
+ */
+int
+gline_destroy_global(struct Client *cptr, struct Client *sptr,
+		     struct Gline *gline, time_t lastmod, char *reason)
+{
+  assert(gline);
+
+  sendto_opmask_butone(0, SNO_GLINE, "%s destroying global %s for %s%s%s%s%s",
+		       (feature_bool(FEAT_HIS_SNOTICES) || IsServer(sptr)) ?
+		       cli_name(sptr) : cli_name((cli_user(sptr))->server),
+		       GlineIsBadChan(gline) ? "BADCHAN" : "GLINE",
+		       gline->gl_nick ? gline->gl_nick : "",
+		       gline->gl_nick ? "!" : "",
+		       gline->gl_user, gline->gl_host ? "@" : "",
+		       gline->gl_host ? gline->gl_host : "");
+  log_write(LS_GLINE, L_INFO, LOG_NOSNOTICE,
+	    "%#C destroying global %s for %s%s%s%s%s", sptr,
+	    GlineIsBadChan(gline) ? "BADCHAN" : "GLINE",
+	    gline->gl_nick ? gline->gl_nick : "",
+	    gline->gl_nick ? "!" : "",
+	    gline->gl_user, gline->gl_host ? "@" : "",
+	    gline->gl_host ? gline->gl_host : "");
+
+  if (!GlineIsLocal(gline))
+    sendcmdto_serv_butone(sptr, CMD_GLINE, cptr, "* %%-%s%s%s%s%s %Tu %Tu :%s",
+			  gline->gl_nick ? gline->gl_nick : "",
+			  gline->gl_nick ? "!" : "",
+			  gline->gl_user, gline->gl_host ? "@" : "",
+			  gline->gl_host ? gline->gl_host : "",
+			  gline->gl_expire - TStime(),
+			  lastmod ? lastmod : gline->gl_lastmod,
+			  reason ? reason : gline->gl_reason);
+
+  gline_free(gline);
+
+  return 0;
+}
+
 /** Find a G-line for a particular mask, guided by certain flags.
  * This always does an exact (string comparison) match of the mask;
  * callers wanting every G-line that matches a possibly-wildcarded query
@@ -1162,7 +1252,7 @@ gline_lookup(struct Client *cptr, unsigned int flags)
         match(gline->gl_nick, cli_name(cptr)) != 0)
       continue;
 
-    if (match(gline->gl_user, (cli_user(cptr))->username) != 0)
+    if (match(gline->gl_user, (cli_user(cptr))->realusername) != 0)
       continue;
 
     assert(GlineIsIpMask(gline));
@@ -1187,7 +1277,7 @@ gline_lookup(struct Client *cptr, unsigned int flags)
           match(gline->gl_nick, cli_name(cptr)) != 0)
         continue;
 
-      if (match(gline->gl_user, (cli_user(cptr))->username) != 0)
+      if (match(gline->gl_user, (cli_user(cptr))->realusername) != 0)
         continue;
 
       if (GlineIsIpMask(gline)) {
@@ -1267,7 +1357,7 @@ IsNickGlined(struct Client *cptr, char *nick)
     if (match(gline->gl_nick, nick) != 0)
       continue;
 
-    if (match(gline->gl_user, (cli_user(cptr))->username) != 0)
+    if (match(gline->gl_user, (cli_user(cptr))->realusername) != 0)
       continue;
 
     if (GlineIsActive(gline))
@@ -1282,7 +1372,7 @@ IsNickGlined(struct Client *cptr, char *nick)
     if (match(gline->gl_nick, nick) != 0)
       continue;
 
-    if (match(gline->gl_user, (cli_user(cptr))->username) != 0)
+    if (match(gline->gl_user, (cli_user(cptr))->realusername) != 0)
       continue;
 
     if (GlineIsIpMask(gline)) {

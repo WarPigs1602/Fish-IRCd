@@ -97,6 +97,7 @@
 #include "numnicks.h"
 #include "s_conf.h"
 #include "send.h"
+#include "history.h"
 
 /* #include <assert.h> -- Now using assert in ircd_log.h */
 
@@ -123,6 +124,7 @@ do_clearmode(struct Client *cptr, struct Client *sptr, struct Channel *chptr,
     MODE_BAN,		'b',
     MODE_LIMIT,		'l',
     MODE_JOINFLOOD,	'j',
+    MODE_HISTORY,	'H',
     MODE_REGONLY,	'r',
     MODE_DELJOINS,      'D',
     MODE_NOCOLOR,       'c',
@@ -173,6 +175,15 @@ do_clearmode(struct Client *cptr, struct Client *sptr, struct Channel *chptr,
   if (del_mode & MODE_KEY && *chptr->mode.key)
     modebuf_mode_string(&mbuf, MODE_DEL | MODE_KEY, chptr->mode.key, 0);
 
+  /* If we're removing the history setting, drop the stored history */
+  if (del_mode & MODE_HISTORY) {
+    if (chptr->mode.hist_lines)
+      modebuf_mode_uint(&mbuf, MODE_DEL | MODE_HISTORY, 0);
+    chptr->mode.hist_lines = 0;
+    chptr->mode.hist_hours = 0;
+    history_clear(chptr);
+  }
+
   /* If we're removing the limit, note that and clear the limit */
   if (del_mode & MODE_LIMIT && chptr->mode.limit) {
     modebuf_mode_uint(&mbuf, MODE_DEL | MODE_LIMIT, chptr->mode.limit);
@@ -207,7 +218,8 @@ do_clearmode(struct Client *cptr, struct Client *sptr, struct Channel *chptr,
 	ClearBanValid(member);
 
       /* Drop channel operator status */
-      if (IsChanOp(member) && del_mode & MODE_CHANOP) {
+      if (IsChanOp(member) && del_mode & MODE_CHANOP
+          && !IsChannelService(member->user)) {
 	modebuf_mode_client(&mbuf, MODE_DEL | MODE_CHANOP, member->user, MAXOPLEVEL + 1);
 	member->status &= ~CHFL_CHANOP;
       }

@@ -368,6 +368,8 @@ msg_tag_s2s_needs_time(const char *tok)
       || !ircd_strcmp(tok, TOK_JUPE)
       || !ircd_strcmp(tok, TOK_GLINE)
       || !ircd_strcmp(tok, TOK_SLINE)
+      || !ircd_strcmp(tok, TOK_BATCH)
+      || !ircd_strcmp(tok, TOK_HISTORY)
       /* Server<->services RPC: consumed by services software that parses
        * P10 fields positionally and does not strip tags.  A @time= prefix
        * shifts every field and breaks SASL/spamfilter routing. */
@@ -419,6 +421,7 @@ msg_tag_format_s2s(char *buf, size_t buflen, struct MsgTag *tags,
   int wrote = 0;
   struct MsgTag *tag;
   const struct MsgTag *time_tag = msg_tag_find(tags, "time");
+  const struct MsgTag *batch_tag = msg_tag_find(tags, "batch");
 
   if (buflen < 3)
     return 0;
@@ -439,8 +442,15 @@ msg_tag_format_s2s(char *buf, size_t buflen, struct MsgTag *tags,
       return 0;
   }
 
+  if (batch_tag && batch_tag->value && *batch_tag->value) {
+    pos = msg_tag_append(pos, end, &wrote, "batch", batch_tag->value);
+    if (!pos)
+      return 0;
+  }
+
   for (tag = tags; tag; tag = tag->next) {
-    if (!ircd_strcmp(tag->key, "time") || !ircd_strcmp(tag->key, "account"))
+    if (!ircd_strcmp(tag->key, "time") || !ircd_strcmp(tag->key, "account")
+        || !ircd_strcmp(tag->key, "batch"))
       continue;
     if (msg_tag_key_client_only(tag->key))
       continue;
@@ -473,6 +483,8 @@ msg_tag_profile(struct Client *to)
     profile |= TAGP_TIME;
   if (msg_tag_wants_account(to))
     profile |= TAGP_ACCOUNT;
+  if (CapHas(cli_active(to), CAP_BATCH))
+    profile |= TAGP_BATCH;
 
   return profile;
 }
@@ -518,6 +530,17 @@ msg_tag_format(char *buf, size_t buflen, struct Client *to,
     pos = msg_tag_append(pos, end, &wrote, "account", esc);
     if (!pos)
       return 0;
+  }
+
+  if (CapHas(cli_active(to), CAP_BATCH)) {
+    struct MsgTag *batch_tag = msg_tag_find(tags, "batch");
+
+    if (batch_tag && batch_tag->value && *batch_tag->value) {
+      pos = msg_tag_append(pos, end, &wrote, batch_tag->key,
+                           batch_tag->value);
+      if (!pos)
+        return 0;
+    }
   }
 
   /* client-only tags */

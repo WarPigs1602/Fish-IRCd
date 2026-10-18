@@ -49,6 +49,10 @@
   _CAP(MULTI_PREFIX, FEAT_CAP_MULTI_PREFIX, 0, "multi-prefix"), \
   _CAP(UHNAMES, FEAT_CAP_UHNAMES, 0, "userhost-in-names"), \
 	_CAP(MESSAGE_TAGS, FEAT_CAP_MESSAGE_TAGS, 0, "message-tags"), \
+	_CAP(BATCH, FEAT_CAP_BATCH, 0, "batch"), \
+	_CAP(CHATHISTORY, FEAT_CAP_CHATHISTORY, 0, "draft/chathistory"), \
+	_CAP(LABELED_RESPONSE, FEAT_CAP_LABELED_RESPONSE, 0, "labeled-response"), \
+	_CAP(MULTILINE, FEAT_CAP_MULTILINE, 0, "draft/multiline"), \
 	_CAP(SERVER_TIME, FEAT_CAP_SERVER_TIME, 0, "server-time"), \
 	_CAP(ACCOUNT_TAG, FEAT_CAP_ACCOUNT_TAG, 0, "account-tag"), \
 	_CAP(CAPNOTIFY, 0, CAPFL_HIDDEN_302 | CAPFL_STICKY_302, "cap-notify"), \

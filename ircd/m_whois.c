@@ -238,7 +238,9 @@ static void do_whois(struct Client* sptr, struct Client *acptr, int parc)
     if (IsBot(acptr) || IsChannelService(acptr))
       send_reply(sptr, RPL_WHOISBOT, name);
 
-    if (HasHiddenHost(acptr) && (IsAnOper(sptr) || acptr == sptr))
+    if ((HasHiddenHost(acptr) || IsHiddenHost(acptr) || IsSetHost(acptr)
+         || ircd_strcmp(user->host, user->realhost))
+        && (IsAnOper(sptr) || acptr == sptr))
       send_reply(sptr, RPL_WHOISACTUALLY, name, user->username,
                  user->realhost, ircd_ntoa(&cli_ip(acptr)));
 

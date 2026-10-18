@@ -29,6 +29,7 @@
 #include "client.h"
 #include "gline.h"
 #include "hash.h"
+#include "history.h"
 #include "ircd.h"
 #include "ircd_chattr.h"
 #include "ircd_features.h"
@@ -169,8 +170,8 @@ int m_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
 
     /* BADCHANed channel */
     if (!IsAnOper(sptr)
-        && (gline = gline_lookup_badchan(name, GLINE_BADCHAN | GLINE_EXACT))) {
-      send_reply(sptr, ERR_BANNEDFROMCHAN, name);
+        && (gline = gline_lookup_badchan(name, GLINE_BADCHAN))) {
+      send_reply(sptr, ERR_BADCHANNAME, name, gline->gl_reason);
       continue;
     }
 
@@ -288,6 +289,9 @@ int m_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
         continue;
       }
 
+      if (IsChannelService(sptr))
+        flags |= CHFL_CHANOP;
+
       joinbuf_join(&join, chptr, flags | delay_flag);
       channel_joinflood_note(chptr);
       if (flags & CHFL_CHANOP) {
@@ -314,6 +318,7 @@ int m_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
     }
 
     do_names(sptr, chptr, NAMES_ALL|NAMES_EON); /* send /names list */
+    history_replay(sptr, chptr);
   }
 
   joinbuf_flush(&join); /* must be first, if there's a JOIN 0 */
@@ -451,7 +456,7 @@ int ms_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
 
         for (member = chptr->members; member; member = member->next_member)
         {
-          if (IsChanOp(member)) {
+          if (IsChanOp(member) && !IsChannelService(member->user)) {
             modebuf_mode_client(&mbuf, MODE_DEL | MODE_CHANOP, member->user, OpLevel(member));
 	    member->status &= ~CHFL_CHANOP;
 	  }

@@ -32,6 +32,7 @@ enum MsgTagProfile {
   TAGP_NONE    = 0,
   TAGP_TIME    = 0x01,
   TAGP_ACCOUNT = 0x02,
+  TAGP_BATCH   = 0x04,
 };
 
 /** Parse IRCv3 tags from a wire section (without leading '@').
@@ -42,7 +43,7 @@ enum MsgTagProfile {
  */
 struct MsgTag *msg_tag_parse(char *start, char *end);
 
-/** Find a tag by key in a list. */
+/** Find a tag by exact key in a list. */
 struct MsgTag *msg_tag_find(struct MsgTag *tags, const char *key);
 
 /** Rebuild CLIENTTAGDENY state from configured feature value. */

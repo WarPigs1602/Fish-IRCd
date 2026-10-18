@@ -137,6 +137,9 @@ extern int gline_modify(struct Client *cptr, struct Client *sptr,
 			time_t lifetime, unsigned int flags);
 extern int gline_destroy(struct Client *cptr, struct Client *sptr,
 			 struct Gline *gline);
+extern int gline_destroy_global(struct Client *cptr, struct Client *sptr,
+				struct Gline *gline, time_t lastmod,
+				char *reason);
 extern struct Gline *gline_find(char *userhost, unsigned int flags);
 extern struct Gline *gline_lookup(struct Client *cptr, unsigned int flags);
 extern struct Gline *gline_lookup_badchan(char *userhost, unsigned int flags);

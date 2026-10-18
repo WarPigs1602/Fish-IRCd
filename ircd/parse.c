@@ -38,6 +38,7 @@
 #include "ircd_string.h"
 #include "msg.h"
 #include "msg_tag.h"
+#include "multiline.h"
 #include "numeric.h"
 #include "numnicks.h"
 #include "opercmds.h"
@@ -109,6 +110,27 @@ static struct MessageTree tok_tree;
 
 /** Array of all supported commands. */
 struct Message msgtab[] = {
+  {
+    MSG_IRCV3_BATCH,
+    TOK_BATCH,
+    0, MAXPARA, 0, 0, NULL,
+    /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+    { m_ignore, m_batch, ms_batch, m_batch, m_ignore }
+  },
+  {
+    MSG_CHATHISTORY,
+    TOK_CHATHISTORY,
+    0, MAXPARA, 0, 0, NULL,
+    /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+    { m_unregistered, m_chathistory, m_ignore, m_chathistory, m_ignore }
+  },
+  {
+    MSG_HISTORY,
+    TOK_HISTORY,
+    0, MAXPARA, 0, 0, NULL,
+    /* UNREG, CLIENT, SERVER, OPER, SERVICE */
+    { m_ignore, m_ignore, ms_history, m_ignore, m_ignore }
+  },
   {
     MSG_PRIVATE,
     TOK_PRIVATE,
@@ -725,6 +747,23 @@ parse_tags(void)
   return current_tags;
 }
 
+/** Label, batch reference and concat flag of the current client line. */
+static char cur_label[72];
+static char cur_batch[48];
+static int cur_concat;
+
+const char *
+parse_client_batch(void)
+{
+  return cur_batch;
+}
+
+int
+parse_client_concat(void)
+{
+  return cur_concat;
+}
+
 /** Parse optional IRCv3 tags at the start of a line.
  * @param[in,out] ch Current parse position.
  * @param[in] bufend End of line.
@@ -954,8 +993,21 @@ parse_client(struct Client *cptr, char *buffer, char *bufend)
     return -1;
   }
 
-  if (!IsServer(cptr))
+  cur_label[0] = '\0';
+  cur_batch[0] = '\0';
+  cur_concat = 0;
+  if (!IsServer(cptr)) {
+    struct MsgTag *t;
+    if ((t = msg_tag_find(current_tags, "label")) && t->value &&
+        strlen(t->value) <= 64)
+      strcpy(cur_label, t->value);
+    if ((t = msg_tag_find(current_tags, "batch")) && t->value &&
+        strlen(t->value) < sizeof(cur_batch))
+      strcpy(cur_batch, t->value);
+    if (msg_tag_find(current_tags, "draft/multiline-concat"))
+      cur_concat = 1;
     current_tags = msg_tag_filter_client(current_tags);
+  }
 
   if (*ch == ':')               /* Is any client doing this ? */
   {
@@ -1004,7 +1056,9 @@ parse_client(struct Client *cptr, char *buffer, char *bufend)
   mptr->bytes += i;
   /* Coarser tag divisor: one max client-tag line must not stall follow-ups. */
   if ((mptr->flags & MFLG_SLOW) || !IsAnOper(cptr))
-    cli_since(cptr) += (2 + i / 120 + tag_len / 512);
+    cli_since(cptr) += IsBot(cptr)
+      ? (1 + i / 240 + tag_len / 1024)
+      : (2 + i / 120 + tag_len / 512);
   /*
    * Allow only 1 msg per 2 seconds
    * (on average) to prevent dumping.
@@ -1070,6 +1124,20 @@ parse_client(struct Client *cptr, char *buffer, char *bufend)
   if (!feature_bool(FEAT_IDLE_FROM_MSG) && IsUser(cptr) &&
       handler != m_ping && handler != m_ignore)
     cli_user(from)->last = CurrentTime;
+
+  if (cur_label[0] && IsUser(cptr) && MyConnect(cptr)
+      && CapActive(cptr, CAP_LABELED_RESPONSE) && CapActive(cptr, CAP_BATCH)
+      && !labeled_active() && handler != m_ping)
+  {
+    int lres;
+    labeled_begin(cptr, cur_label);
+    lres = (*handler) (cptr, from, i, para);
+    if (lres == CPTR_KILLED || IsDead(cptr))
+      labeled_abort();
+    else
+      labeled_end(cptr);
+    return lres;
+  }
 
   return (*handler) (cptr, from, i, para);
 }

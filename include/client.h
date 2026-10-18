@@ -59,6 +59,7 @@ struct Whowas;
 struct hostent;
 struct Privs;
 struct AuthRequest;
+struct MlBatch;
 
 /*
  * Structures
@@ -69,7 +70,7 @@ struct AuthRequest;
  */
 
 /** Value to hold a set of capability bits (from capab.h). */
-typedef unsigned short capset_t;
+typedef unsigned int capset_t;
 
 /** Single element in a flag bitset array. */
 typedef unsigned long flagpage_t;
@@ -280,6 +281,7 @@ struct Connection
   struct Timer        con_sasl_timer; /**< SASL timeout timer */
   char*               con_rexmit;    /**< TLS retransmission data */
   size_t              con_rexmit_len; /**, TLS retransmission length */
+  struct MlBatch*     con_mlbatch;   /**< Open draft/multiline batch (client-sent) */
 };
 
 /** Magic constant to identify valid Connection structures. */
@@ -436,6 +438,7 @@ struct Client {
 #define cli_sentalong(cli)      con_sentalong(cli_connect(cli))
 /** Get SASL session cookie for client. */
 #define cli_sasl(cli)           con_sasl(cli_connect(cli))
+#define cli_mlbatch(cli)        ((cli_connect(cli))->con_mlbatch)
 /** Get SASL timeout timer for client. */
 #define cli_sasl_timer(cli)     (&con_sasl_timer(cli_connect(cli)))
 /** Get the WebSocket mode for the client. */

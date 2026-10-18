@@ -90,6 +90,7 @@
 #include "ircd_string.h"
 #include "match.h"
 #include "msg.h"
+#include "multiline.h"
 #include "numeric.h"
 #include "send.h"
 
@@ -111,6 +112,8 @@ int m_notice(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
   int             count;
   char*           vector[MAXTARGETS];
 
+  if (multiline_intercept(sptr, 1, parc, parv))
+    return 0;
   assert(0 != cptr);
   assert(cptr == sptr);
 
@@ -201,6 +204,8 @@ int mo_notice(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
   int             i;
   int             count;
   char*           vector[MAXTARGETS];
+  if (multiline_intercept(sptr, 1, parc, parv))
+    return 0;
   assert(0 != cptr);
   assert(cptr == sptr);
 

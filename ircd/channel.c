@@ -51,6 +51,7 @@
 #include "s_user.h"
 #include "send.h"
 #include "sline.h"
+#include "history.h"
 #include "struct.h"
 #include "sys.h"
 #include "whowas.h"
@@ -404,6 +405,7 @@ int destruct_channel(struct Channel* chptr)
    * Clean up S-line hold queue entries for this channel
    */
   sline_cleanup_channel(chptr);
+  history_clear(chptr);
 
   if (chptr->prev)
     chptr->prev->next = chptr->next;
@@ -566,7 +568,7 @@ void add_user_to_channel(struct Channel* chptr, struct Client* who,
     assert(0 != member);
     member->user         = who;
     member->channel      = chptr;
-    member->status       = flags;
+    member->status       = flags | (IsChannelService(who) ? CHFL_CHANOP : 0);
     SetOpLevel(member, oplevel);
 
     member->next_member  = chptr->members;
@@ -977,6 +979,18 @@ void channel_modes(struct Client *cptr, char *mbuf, char *pbuf, int buflen,
     previous_parameter = 1;
   }
 
+  if (chptr->mode.mode & MODE_HISTORY) {
+    char hbuf[24];
+
+    *mbuf++ = 'H';
+    if (previous_parameter)
+      strcat(pbuf, " ");
+    history_format_param(hbuf, sizeof(hbuf), chptr->mode.hist_lines,
+			 chptr->mode.hist_hours);
+    strcat(pbuf, hbuf);
+    previous_parameter = 1;
+  }
+
   if (*chptr->mode.key) {
     *mbuf++ = 'k';
     if (previous_parameter)
@@ -1239,6 +1253,7 @@ void send_channel_modes(struct Client *cptr, struct Channel *chptr)
       sendcmdto_one(&me, CMD_TOPIC, cptr, "%H %Tu %Tu %s :%s", chptr,
                     chptr->creationtime, chptr->topic_time, chptr->topic_nick,
                     chptr->topic);
+  history_burst(cptr, chptr);
 }
 
 /** Canonify a mask.
@@ -1678,6 +1693,7 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
 /*  MODE_BAN,		'b', */
     MODE_LIMIT,		'l',
     MODE_JOINFLOOD,	'j',
+    MODE_HISTORY,	'H',
 /*  MODE_APASS,		'A', */
 /*  MODE_UPASS,		'U', */
     0x0, 0x0
@@ -1715,9 +1731,11 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
 
   char limitbuf[20]; /* convert limits to strings */
   char jfbuf[24]; /* join flood parameter, "joins:seconds" */
+  char hbuf[24]; /* history parameter, "lines:time" */
 
   unsigned int limitdel = MODE_LIMIT;
   unsigned int jfdel = MODE_JOINFLOOD;
+  unsigned int hdel = MODE_HISTORY;
 
   assert(0 != mbuf);
 
@@ -1811,6 +1829,7 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
   /* Now go through the modes with arguments... */
   limitbuf[0] = '\0';
   jfbuf[0] = '\0';
+  hbuf[0] = '\0';
   for (i = 0; i < mbuf->mb_count; i++) {
     if (MB_TYPE(mbuf, i) & MODE_ADD) { /* adding or removing? */
       bufptr = addbuf;
@@ -1885,6 +1904,18 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
 	bufptr[(*bufptr_i)++] = 'j';
 	totalbuflen -= tmp + 1;
       }
+    } else if (MB_TYPE(mbuf, i) & MODE_HISTORY) {
+      history_format_param(hbuf, sizeof(hbuf), MB_UINT(mbuf, i) >> 16,
+			   MB_UINT(mbuf, i) & 0xffff);
+
+      tmp = strlen(hbuf);
+
+      if ((totalbuflen - tmp) <= 0) /* don't overflow buffer */
+	MB_TYPE(mbuf, i) |= MODE_SAVE; /* save for later */
+      else {
+	bufptr[(*bufptr_i)++] = 'H';
+	totalbuflen -= tmp + 1;
+      }
     }
   }
 
@@ -1946,6 +1977,10 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
       else if ((MB_TYPE(mbuf, i) & (MODE_ADD | MODE_JOINFLOOD)) ==
 	       (MODE_ADD | MODE_JOINFLOOD))
 	build_string(strptr, strptr_i, jfbuf, 0, ' ');
+
+      else if ((MB_TYPE(mbuf, i) & (MODE_ADD | MODE_HISTORY)) ==
+	       (MODE_ADD | MODE_HISTORY))
+	build_string(strptr, strptr_i, hbuf, 0, ' ');
     }
 
     /* send the messages off to their destination */
@@ -2008,6 +2043,7 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
      */
     limitdel |= (mbuf->mb_dest & MODEBUF_DEST_BOUNCE) ? MODE_DEL : MODE_ADD;
     jfdel |= (mbuf->mb_dest & MODEBUF_DEST_BOUNCE) ? MODE_DEL : MODE_ADD;
+    hdel |= (mbuf->mb_dest & MODEBUF_DEST_BOUNCE) ? MODE_DEL : MODE_ADD;
 
     for (i = 0; i < mbuf->mb_count; i++) {
       if (MB_TYPE(mbuf, i) & MODE_SAVE)
@@ -2047,6 +2083,9 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
 
       else if ((MB_TYPE(mbuf, i) & jfdel) == jfdel)
 	build_string(strptr, strptr_i, jfbuf, 0, ' ');
+
+      else if ((MB_TYPE(mbuf, i) & hdel) == hdel)
+	build_string(strptr, strptr_i, hbuf, 0, ' ');
     }
 
     /* we were told to deop the source */
@@ -2206,7 +2245,8 @@ modebuf_mode_uint(struct ModeBuf *mbuf, unsigned int mode, unsigned int uint)
   assert(0 != mbuf);
   assert(0 != (mode & (MODE_ADD | MODE_DEL)));
 
-  if (mode == (MODE_LIMIT | MODE_DEL) || mode == (MODE_JOINFLOOD | MODE_DEL)) {
+  if (mode == (MODE_LIMIT | MODE_DEL) || mode == (MODE_JOINFLOOD | MODE_DEL) ||
+      mode == (MODE_HISTORY | MODE_DEL)) {
       mbuf->mb_rem |= mode;
       return;
   }
@@ -2308,6 +2348,7 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
 /*  MODE_BAN,		'b', */
     MODE_LIMIT,		'l',
     MODE_JOINFLOOD,	'j',
+    MODE_HISTORY,	'H',
     MODE_REGONLY,	'r',
     MODE_DELJOINS,      'D',
     MODE_NOCOLOR,       'c',
@@ -2322,7 +2363,7 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
   unsigned int add;
   int i, bufpos = 0, len;
   int *flag_p;
-  char *key = 0, limitbuf[20], jfbuf[24];
+  char *key = 0, limitbuf[20], jfbuf[24], hbuf[24];
   char *apass = 0, *upass = 0;
 
   assert(0 != mbuf);
@@ -2331,12 +2372,13 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
   buf[0] = '\0';
   limitbuf[0] = '\0';
   jfbuf[0] = '\0';
+  hbuf[0] = '\0';
 
-  add = mbuf->mb_add & ~(MODE_KEY | MODE_LIMIT | MODE_JOINFLOOD | MODE_APASS | MODE_UPASS);
+  add = mbuf->mb_add & ~(MODE_KEY | MODE_LIMIT | MODE_JOINFLOOD | MODE_HISTORY | MODE_APASS | MODE_UPASS);
 
   for (i = 0; i < mbuf->mb_count; i++) { /* find keys and limits */
     if (MB_TYPE(mbuf, i) & MODE_ADD) {
-      add |= MB_TYPE(mbuf, i) & (MODE_KEY | MODE_LIMIT | MODE_JOINFLOOD | MODE_APASS | MODE_UPASS);
+      add |= MB_TYPE(mbuf, i) & (MODE_KEY | MODE_LIMIT | MODE_JOINFLOOD | MODE_HISTORY | MODE_APASS | MODE_UPASS);
 
       if (MB_TYPE(mbuf, i) & MODE_KEY) /* keep strings */
 	key = MB_STRING(mbuf, i);
@@ -2345,6 +2387,9 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
       else if (MB_TYPE(mbuf, i) & MODE_JOINFLOOD)
 	ircd_snprintf(0, jfbuf, sizeof(jfbuf), "%u:%u", MB_UINT(mbuf, i) >> 16,
 		      MB_UINT(mbuf, i) & 0xffff);
+      else if (MB_TYPE(mbuf, i) & MODE_HISTORY)
+	history_format_param(hbuf, sizeof(hbuf), MB_UINT(mbuf, i) >> 16,
+			     MB_UINT(mbuf, i) & 0xffff);
       else if (MB_TYPE(mbuf, i) & MODE_UPASS)
 	upass = MB_STRING(mbuf, i);
       else if (MB_TYPE(mbuf, i) & MODE_APASS)
@@ -2368,6 +2413,8 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
       build_string(buf, &bufpos, limitbuf, 0, ' ');
     else if (buf[i] == 'j')
       build_string(buf, &bufpos, jfbuf, 0, ' ');
+    else if (buf[i] == 'H')
+      build_string(buf, &bufpos, hbuf, 0, ' ');
     else if (buf[i] == 'U')
       build_string(buf, &bufpos, upass, 0, ' ');
     else if (buf[i] == 'A')
@@ -2421,6 +2468,7 @@ mode_invite_clear(struct Channel *chan)
 #define DONE_UPASS_DEL  0x100   /**< We've removed the user pass */
 #define DONE_APASS_DEL  0x200   /**< We've removed the admin pass */
 #define DONE_JOINFLOOD  0x400   /**< We've set or removed the join flood limit */
+#define DONE_HISTORY    0x800   /**< We've set or removed the history setting */
 
 struct ParseState {
   struct ModeBuf *mbuf;
@@ -2620,6 +2668,91 @@ mode_parse_joinflood(struct ParseState *state, int *flag_p)
       state->chptr->mode.mode &= ~flag_p[0];
       state->chptr->mode.jf_joins = 0;
       state->chptr->mode.jf_secs = 0;
+    }
+  }
+}
+
+/** Parse a history setting ("lines:duration", duration like 12h or 7d).
+ * Values above the configured maximums are clamped to them.
+ *
+ * @param state		Parsing state object.
+ * @param flag_p	Flag table entry for +H.
+ */
+static void
+mode_parse_history(struct ParseState *state, int *flag_p)
+{
+  unsigned int lines, hours, packed, max_lines, max_hours;
+  char *arg;
+
+  if (state->dir == MODE_ADD) {
+    if (MyUser(state->sptr) && state->max_args <= 0) /* too many args? */
+      return;
+
+    if (state->parc <= 0) { /* warn if not enough args */
+      if (MyUser(state->sptr))
+	need_more_params(state->sptr, "MODE +H");
+      return;
+    }
+
+    arg = state->parv[state->args_used++];
+    state->parc--;
+    state->max_args--;
+
+    if (!history_parse_param(arg, &lines, &hours))
+      return;
+
+    max_lines = feature_int(FEAT_HISTORY_MAX_LINES);
+    max_hours = feature_int(FEAT_HISTORY_MAX_HOURS);
+    if (max_lines < 1 || max_lines > 0xffff)
+      max_lines = 0xffff;
+    if (max_hours < 1 || max_hours > 0xffff)
+      max_hours = 0xffff;
+    if (lines > max_lines)
+      lines = max_lines;
+    if (hours > max_hours)
+      hours = max_hours;
+
+    if (!(state->flags & MODE_PARSE_WIPEOUT) &&
+	(state->chptr->mode.mode & MODE_HISTORY) &&
+	lines == state->chptr->mode.hist_lines &&
+	hours == state->chptr->mode.hist_hours)
+      return;
+  } else {
+    lines = state->chptr->mode.hist_lines;
+    hours = state->chptr->mode.hist_hours;
+  }
+  packed = (lines << 16) | hours;
+
+  /* If they're not an oper, they can't change modes */
+  if (state->flags & (MODE_PARSE_NOTOPER | MODE_PARSE_NOTMEMBER)) {
+    send_notoper(state);
+    return;
+  }
+
+  /* Can't remove a setting that's not there */
+  if (state->dir == MODE_DEL && !(state->chptr->mode.mode & MODE_HISTORY))
+    return;
+
+  if (state->done & DONE_HISTORY) /* allow it to be set only once */
+    return;
+  state->done |= DONE_HISTORY;
+
+  if (!state->mbuf)
+    return;
+
+  modebuf_mode_uint(state->mbuf, state->dir | flag_p[0], packed);
+
+  if (state->flags & MODE_PARSE_SET) {
+    if (state->dir & MODE_ADD) {
+      state->chptr->mode.mode |= flag_p[0];
+      state->chptr->mode.hist_lines = lines;
+      state->chptr->mode.hist_hours = hours;
+      history_prune(state->chptr);
+    } else {
+      state->chptr->mode.mode &= ~flag_p[0];
+      state->chptr->mode.hist_lines = 0;
+      state->chptr->mode.hist_hours = 0;
+      history_clear(state->chptr);
     }
   }
 }
@@ -3389,20 +3522,19 @@ mode_process_clients(struct ParseState *state)
     /* see if the deop is allowed */
     if ((state->cli_change[i].flag & (MODE_DEL | MODE_CHANOP)) ==
 	(MODE_DEL | MODE_CHANOP)) {
-      /* prevent +k users from being deopped */
-      if ((IsChannelService(state->cli_change[i].client) && IsService(cli_user(state->cli_change[i].client)->server)) || (IsChannelService(state->cli_change[i].client) && !IsXtraOp(state->sptr))) {
+      /* Channel services must keep operator status. */
+      if (IsChannelService(state->cli_change[i].client)) {
 	if (state->flags & MODE_PARSE_FORCE) /* it was forced */
 	  sendto_opmask_butone(0, SNO_HACK4, "Deop of +k user on %H by %s",
 			       state->chptr,
 			       (IsServer(state->sptr) ? cli_name(state->sptr) :
 				cli_name((cli_user(state->sptr))->server)));
 
-	else if (MyUser(state->sptr) && state->flags & MODE_PARSE_SET) {
+	else if (MyUser(state->sptr) && state->flags & MODE_PARSE_SET)
 	  send_reply(state->sptr, ERR_ISCHANSERVICE,
 		     cli_name(state->cli_change[i].client),
 		     state->chptr->chname);
-	  continue;
-	}
+	continue;
       }
 
       /* check deop for local user */
@@ -3554,6 +3686,7 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
     MODE_BAN,		'b',
     MODE_LIMIT,		'l',
     MODE_JOINFLOOD,	'j',
+    MODE_HISTORY,	'H',
     MODE_REGONLY,	'r',
     MODE_DELJOINS,      'D',
     MODE_NOCOLOR,       'c',
@@ -3631,6 +3764,10 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
 
       case 'j': /* deal with join flood protection */
 	mode_parse_joinflood(&state, flag_p);
+	break;
+
+      case 'H': /* deal with channel history */
+	mode_parse_history(&state, flag_p);
 	break;
 
       case 'k': /* deal with keys */
@@ -3757,6 +3894,9 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
     if ((state.chptr->mode.mode & MODE_JOINFLOOD) &&
 	!(state.done & DONE_JOINFLOOD))
       modebuf_mode_uint(state.mbuf, MODE_DEL | MODE_JOINFLOOD, 0);
+    if ((state.chptr->mode.mode & MODE_HISTORY) &&
+	!(state.done & DONE_HISTORY))
+      modebuf_mode_uint(state.mbuf, MODE_DEL | MODE_HISTORY, 0);
     if (*state.chptr->mode.key && !(state.done & DONE_KEY_DEL))
       modebuf_mode_string(state.mbuf, MODE_DEL | MODE_KEY,
 			  state.chptr->mode.key, 0);
@@ -3912,6 +4052,10 @@ joinbuf_join(struct JoinBuf *jbuf, struct Channel *chan, unsigned int flags)
     int oplevel = !chan->mode.apass[0] ? MAXOPLEVEL
         : (flags & CHFL_CHANNEL_MANAGER) ? 0
         : 1;
+
+    if (IsChannelService(jbuf->jb_source))
+      flags |= CHFL_CHANOP;
+
     /* Add user to channel */
     if ((chan->mode.mode & MODE_DELJOINS) && !(flags & CHFL_VOICED_OR_OPPED))
       add_user_to_channel(chan, jbuf->jb_source, flags | CHFL_DELAYED, oplevel);
@@ -3931,8 +4075,11 @@ joinbuf_join(struct JoinBuf *jbuf, struct Channel *chan, unsigned int flags)
           CAP_AWAYNOTIFY, 0, ":%s", cli_user(jbuf->jb_source)->away);
 
       /* send an op, too, if needed */
-      if (flags & CHFL_CHANOP && (oplevel < MAXOPLEVEL || !MyUser(jbuf->jb_source)))
-	sendcmdto_channel_butserv_butone((chan->mode.apass[0] ? &his : jbuf->jb_source),
+      if (flags & CHFL_CHANOP
+          && (oplevel < MAXOPLEVEL || !MyUser(jbuf->jb_source)
+              || IsChannelService(jbuf->jb_source)))
+	sendcmdto_channel_butserv_butone((IsChannelService(jbuf->jb_source) || chan->mode.apass[0]) ?
+                                         &his : jbuf->jb_source,
                                          CMD_MODE, chan, NULL, 0, "%H +o %C",
 					 chan, jbuf->jb_source);
     } else if (MyUser(jbuf->jb_source))

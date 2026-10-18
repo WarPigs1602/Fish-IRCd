@@ -728,7 +728,7 @@ static int read_packet(struct Client *cptr, int socket_ready)
 
   if (socket_ready &&
       !(IsUser(cptr) &&
-	recvq_over_flood(cptr, flood_limit))) {
+	recvq_over_flood(cptr, IsBot(cptr) ? flood_limit * 2 : flood_limit))) {
     IOResult io_result = IsTLS(cptr) && s_tls(&cli_socket(cptr))
       ? ircd_tls_recv(cptr, readbuf, sizeof(readbuf), &length)
       : os_recv_nonb(cli_fd(cptr), readbuf, sizeof(readbuf), &length);
@@ -894,7 +894,7 @@ static int read_packet(struct Client *cptr, int socket_ready)
       return exit_client(cptr, cptr, &me, "dbuf_put fail");
 
     Debug((DEBUG_DEBUG, "dbuf: %u maxfl: %u", DBufLength(&(cli_recvQ(cptr))), GetMaxFlood(cptr)));
-    if (recvq_over_flood(cptr, GetMaxFlood(cptr)))
+    if (recvq_over_flood(cptr, IsBot(cptr) ? GetMaxFlood(cptr) * 2 : GetMaxFlood(cptr)))
       return exit_client(cptr, cptr, &me, "Excess Flood");
 
     while (DBufLength(&(cli_recvQ(cptr))) && !NoNewLine(cptr) &&

@@ -37,6 +37,7 @@
 #include "msg.h"
 #include "msgq.h"
 #include "msg_tag.h"
+#include "multiline.h"
 #include "websocket.h"
 #include "numnicks.h"
 #include "parse.h"
@@ -328,6 +329,9 @@ make_wire_msgbuf(struct Client *to, struct MsgBuf *body,
   return wire;
 }
 
+/** Explicit tag prefix for the next send_buffer() call (see sendtaggedto_one). */
+static const char *tag_override;
+
 /** Try to send a buffer to a client, queueing it if needed.
  * @param[in,out] to Client to send message to.
  * @param[in] from Message source (for account-tag; may be NULL).
@@ -388,6 +392,9 @@ void send_buffer(struct Client* to, struct Client* from, struct MsgBuf* buf, int
                                   invent);
       prefix = taglen ? tagbuf : 0;
     }
+  } else if (tag_override) {
+    prefix = *tag_override ? tag_override : 0;
+    taglen = prefix ? (unsigned int)strlen(prefix) : 0;
   } else if (!CapHas(cli_active(to), CAP_MESSAGE_TAGS) &&
              tctx && tctx->tok && !strcmp(tctx->tok, TOK_TAGMSG)) {
     return;
@@ -412,6 +419,13 @@ void send_buffer(struct Client* to, struct Client* from, struct MsgBuf* buf, int
   } else {
     taglen = msg_tag_format(tagbuf, sizeof(tagbuf), to, from, tags, local_time);
     prefix = taglen ? tagbuf : 0;
+  }
+
+  if (!IsServer(to)) {
+    if (multiline_capture(to, tctx ? tctx->tok : NULL, prefix, taglen, buf))
+      return;
+    if (labeled_capture(to, prefix, taglen, buf))
+      return;
   }
 
   if (prefix && taglen) {
@@ -492,6 +506,29 @@ static int match_it(struct Client *from, struct Client *one, const char *mask, i
     default:
       return (match(mask, cli_name(cli_user(one)->server)) == 0);
   }
+}
+
+/** Send a line to one client with a caller-supplied tag prefix.
+ * @param[in] to Client receiving message.
+ * @param[in] tags Complete tag section including '@' and trailing space,
+ *   or NULL/empty for none.  Replaces the automatic tags.
+ * @param[in] pattern Format string of message.
+ */
+void sendtaggedto_one(struct Client *to, const char *tags,
+                      const char *pattern, ...)
+{
+  struct MsgBuf *mb;
+  va_list vl;
+
+  va_start(vl, pattern);
+  mb = msgq_vmake(to, pattern, vl);
+  va_end(vl);
+
+  tag_override = tags ? tags : "";
+  send_buffer(to, NULL, mb, 0, NULL, NULL);
+  tag_override = NULL;
+
+  msgq_clean(mb);
 }
 
 /** Send an unprefixed line to a client.

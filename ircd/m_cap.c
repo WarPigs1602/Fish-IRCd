@@ -34,6 +34,7 @@
 #include "ircd_snprintf.h"
 #include "ircd_string.h"
 #include "msg.h"
+#include "multiline.h"
 #include "numeric.h"
 #include "send.h"
 #include "s_auth.h"
@@ -233,8 +234,15 @@ send_caplist(struct Client *sptr, capset_t set,
 
     /* Get capability value for LS command */
     const char *cap_value = "";
+    char mlval[48];
     if (!strcmp(subcmd, "LS")) {
-      if (capab_list[i].value[0] != '\0' && HasFlag(sptr, FLAG_CAP302)) {
+      if (capab_list[i].cap == CAP_MULTILINE) {
+        if (HasFlag(sptr, FLAG_CAP302)) {
+          ircd_snprintf(0, mlval, sizeof(mlval), "max-bytes=%u,max-lines=%u",
+                        multiline_max_bytes(), multiline_max_lines());
+          cap_value = mlval;
+        }
+      } else if (capab_list[i].value[0] != '\0' && HasFlag(sptr, FLAG_CAP302)) {
         cap_value = capab_list[i].value;
       }
     }
