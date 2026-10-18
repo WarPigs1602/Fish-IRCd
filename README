@@ -1,145 +1,84 @@
-Fish-IRCd
+# Fish-IRCd
 
-Fish-IRCd is a fork of ircu2 (https://github.com/UndernetIRC/ircu2).
-Some elements are derived from snircd (https://codeberg.org/quakenet/snircd).
-The goal is to achieve full snircd compatibility based on the current ircu2.
+```text
+      ><(((('>      F I S H - I R C D
+```
 
-	Welcome to ircu2.10.12, the Undernet IRC daemon
+Fish-IRCd is an actively developed IRC server based on [Undernet's ircu2](https://github.com/UndernetIRC/ircu2). It incorporates selected changes from [snircd](https://codeberg.org/quakenet/snircd) and aims to improve compatibility with snircd while retaining ircu2's P10 server protocol.
 
-Version u2.10.12 of the Undernet ircd incorporates many new features
-over its predecessor, and we feel that using it will make you very
-happy indeed.
+This repository is a development snapshot, not a ready-to-run public IRC network configuration. Review and adapt the sample configuration, network links, TLS certificates, and operator credentials before deploying a server.
 
-New features include:
-  - A completely rewritten network event engine, which make full use
-    of the asynchronous event engines available in FreeBSD (kqueue)
-    and Solaris (/dev/poll), resulting in dramaticaly improved
-    performance.
-  - New F: (feature) lines in ircd.conf, and the GET/SET commands allow
-    many settings to be changed dynamically, rather than by with compile-
-    time configuration.
-  - The new "account" feature added to the P10 protocol, allows people to
-    remain logged in to service bots (i.e., gnuworld) during a netsplit.
-    This means people will not have to login again once the network rejoins.
+## Project highlights
 
-INSTALLATION
+- P10 server-to-server protocol and ircu2-derived configuration.
+- TLS support through OpenSSL, GnuTLS, or libtls.
+- IPv4/IPv6 networking, SASL, WebSocket listeners, and IRCv3 features including BATCH and CHATHISTORY.
+- Autotools-based build, with C unit tests and a Python/Docker integration test suite.
 
-Please see the INSTALL file for installation instructions, for hints on how
-to best configure your OS for running ircu under high load, see the various
-README.<platform> files.
+The current source identifies as `Fish-IRCd(1.0-SNAPSHOT)` and is based on ircu2 u2.10.12.19, with snircd 1.3.5 compatibility noted in its version string. See [`include/patchlevel.h`](include/patchlevel.h) for the version definition and [`ChangeLog.11`](ChangeLog.11), [`ChangeLog.12`](ChangeLog.12), and [`RELEASE.NOTES`](RELEASE.NOTES) for upstream history.
 
-COMPATIBILITY
+## Classic installation
 
-This version of ircu will only work with servers that use the P10 protocol,
-some of the new features will only work between ircu2.10.12 servers.
+On Debian or Ubuntu, install the build tools and a TLS development library:
 
-GENERAL PERFORMANCE HINTS
+```sh
+sudo apt-get update
+sudo apt-get install build-essential autoconf automake bison flex pkg-config libssl-dev
+```
 
-For platform-specific notes and hints, see the platform-specific
-sections below.  These notes apply to servers that will serve large
-numbers (thousands) of clients simultaneously.  If your server serves
-a small amount of users, the defaults should work well enough.
+From the repository root, generate the build system, configure, compile, run the C test suite, and install under your home directory:
 
- - Run an OS that supports an asynchronous network event engine; currently
-   these are FreeBSD (kqueue), and Solaris (/dev/poll); possibly other BSDs
-   will also support kqueue. This will have a dramatic effect on performance.
- - Make things as lean as possible: Make your server dedicated to ircu,
-   disable anything that is not neccesary, and build a custom kernel (where
-   possible).
- - Tune kernel parameters as described in the platform-specific
-   sections below.
- - With many clients connecting each second, ircu will be doing lots of DNS
-   lookups. Make sure that the DNS server(s) in your /etc/resolv.conf are as
-   close as possible, or run a local caching DNS server on your IRC server.
+```sh
+./autogen.sh
+./configure --prefix="$HOME" --with-tls=openssl
+make
+make check
+make install
+```
 
-TIME SYNCHRONIZATION
+`--with-tls` accepts `none`, `openssl`, `gnutls`, or `libtls`; install the matching development package before configuring. To see the other configure options, run `./configure --help`.
 
-Many things can and will go horribly wrong when the clocks on the servers
-on your network become (too far) out of sync. It is therefore highly
-recommended that all servers run a version of ntpd that will keep their
-clocks from going astray.
+The default data directory with this prefix is `$HOME/lib`. Copy the example configuration there and edit it for your server:
 
-INFORMATION HIDING
+```sh
+cp "$HOME/lib/example.conf" "$HOME/lib/ircd.conf"
+${EDITOR:-vi} "$HOME/lib/ircd.conf"
+```
 
-As per undernet-admins CFV-165, this server contains code that will,
-by default, hide certain information from ordinary users. If you do
-not want this, override the default "HIS" feature settings in your
-ircd.conf.
+Review the configuration carefully before exposing the server to a network. In particular, set the server identity, network links, operator credentials, and TLS certificate paths; the example is not a production-ready configuration. Check the configuration and then start the server in the foreground:
 
-MORE INFORMATION
+```sh
+"$HOME/bin/ircd" -k -d "$HOME/lib" -f ircd.conf
+"$HOME/bin/ircd" -n -d "$HOME/lib" -f ircd.conf
+```
 
-For more information on this software, see the included documentation
-in the doc/ directory, as well as http://coder-com.undernet.org.
+Omit `-n` to let the server detach from the terminal. For a system-wide installation, choose an appropriate prefix (for example `/usr/local`) and install with the permissions required for that prefix. For further installation and configuration details, see [`INSTALL`](INSTALL) and [`doc/example.conf`](doc/example.conf).
 
-For general information on the Undernet, vist http://www.undernet.org
+## Running the integration tests
 
-Happy IRCing!
+The Python integration tests use Docker Compose to start disposable IRC server topologies. Install Docker with its Compose plugin, Python 3.10 or newer, and [uv](https://docs.astral.sh/uv/), then run:
 
-RUNNING THIS SERVER ON LINUX
+```sh
+cd tests
+uv sync
+uv run pytest
+```
 
-If you run Linux 2.6 or above (or 2.4 with appropriate patches), ircu
-can use the epoll family of system calls for much more efficient
-checks of which connections are active.  Most pre-epoll systems will
-use 100% CPU with 2000 clients; with epoll, a server may use only a
-few percent of CPU with the same load.
+To run tests that do not need Docker:
 
-To handle that many connections, the ircd must be started with a high
-enough file descriptor resource.  Check your distribution's docs on
-how to set the global and per-user limits according to your expected
-load.
+```sh
+uv run pytest test_irc_client.py
+```
 
-RUNNING THIS SERVER ON FREEBSD
+The suite also supports pytest markers such as `single_server`, `multi_server`, `tls`, `tls_single`, `dns`, `limits`, and `nf_compat`. See [`tests/README.md`](tests/README.md) for test selection, Docker topologies, TLS setup, and details on the test harness.
 
-When running on FreeBSD, ircu can make use of the kqueue() event engine, which
-results in much improved performance over the old poll()-based method. kqueue
-is included in the more recent 4.x releases of FreeBSD.
+## Documentation
 
-In order for ircu to be able to serve many clients simultaneously, you need
-to increase the maximum allowable number of open files in the system. To do
-this, add commands such as the following during your system's boot sequence:
+- [`INSTALL`](INSTALL) — build and installation notes.
+- [`doc/example.conf`](doc/example.conf) — sample server configuration.
+- [`doc/`](doc/) — protocol, configuration, and platform documentation.
+- [`tests/README.md`](tests/README.md) — integration test guide.
 
-sysctl -w kern.maxfiles=16384
-sysctl -w kern.maxfilesperproc=16384
+## License
 
-Unless you will be serving thousands of clients simultaneously, you will not
-need to do the following, unless of course you just can't stand having a
-system that is not optimized to its limits :)
-
-Build a custom kernel: Make your kernel as lean as possible by removing all
-drivers and options you will not need. The following parameters will affect
-performance, they are listed with suggested values only. For more information
-on what they do exactly, see FreeBSD's documentation.
-
-maxusers        2048
-options         NMBCLUSTERS=65535
-options         ICMP_BANDLIM
-
-Also, you may wish to run the following at system startup (from /etc/rc.local,
-or whichever other method you prefer):
-
-sysctl -w net.inet.tcp.rfc1323=1
-sysctl -w net.inet.tcp.delayed_ack=0
-sysctl -w net.inet.tcp.restrict_rst=1
-sysctl -w kern.ipc.maxsockbuf=2097152
-sysctl -w kern.ipc.somaxconn=2048
-
-Created by Sengaia <sengaia@undernet.org>, July 20 2002.
-
-RUNNING THIS SERVER ON SOLARIS
-
-When running on Solaris, ircu can make use of the /dev/poll event engine, which
-results in much improved performance over the old poll()-based method. Solaris
-versions 8 and 9 include /dev/poll out of the box, for Solaris 7 you will have
-to grab and install Patch-ID 106541-21.
-
-In order to increase the number of clients ircu can handle, add lines such as
-the following to /etc/system:
-
-* set hard limit on file descriptors
-set rlim_fd_max = 16384
-* set soft limit on file descriptors
-set rlim_fd_cur = 8192
-
-For more useful hints see http://www.sean.de/Solaris/soltune.html
-
-Created by Sengaia <sengaia@undernet.org> on July 20, 2002.
+Fish-IRCd is distributed under the GNU General Public License, version 1 or (at your option) any later version. See [`LICENSE`](LICENSE).
