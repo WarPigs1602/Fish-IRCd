@@ -179,7 +179,9 @@ int ms_destruct(struct Client* cptr, struct Client* sptr, int parc, char* parv[]
     if (*chptr->mode.apass)
       modebuf_mode_string(&mbuf, MODE_DEL | MODE_APASS, chptr->mode.apass, 0);
     for (link = chptr->banlist; link; link = link->next)
-      modebuf_mode_string(&mbuf, MODE_DEL | MODE_BAN, link->banstr, 0);
+      modebuf_mode_string(&mbuf, MODE_DEL |
+			  ((link->flags & BAN_EXCEPTION) ? MODE_EXCEPT : MODE_BAN),
+			  link->banstr, 0);
     modebuf_flush(&mbuf);
 #endif
 

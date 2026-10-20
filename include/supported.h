@@ -39,39 +39,45 @@
                 " USERIP"\
                 " CPRIVMSG"\
                 " CNOTICE"\
-                " SILENCE=%i" \
-                " MODES=%i" \
+                " KNOCK"\
+                " BOT=B" \
+                " SILENCE=%i"
+
+/* Limits */
+#define FEATURES2 "MODES=%i" \
                 " MAXCHANNELS=%i" \
                 " MAXBANS=%i" \
                 " NICKLEN=%i" \
-                " CHATHISTORY=%i"
-
-#define FEATURES2 "MAXNICKLEN=%i" \
+                " MAXNICKLEN=%i" \
                 " TOPICLEN=%i" \
-                " BOT=B" \
                 " AWAYLEN=%i" \
                 " KICKLEN=%i" \
                 " CHANNELLEN=%i" \
-                " MAXCHANNELLEN=%i" \
-                " CHANTYPES=%s" \
+                " MAXCHANNELLEN=%i"
+
+/* Channel and network properties */
+#define FEATURES3 "CHANTYPES=%s" \
                 " PREFIX=%s" \
                 " STATUSMSG=%s" \
                 " CHANMODES=%s" \
+                " EXCEPTS=e" \
                 " CASEMAPPING=%s" \
                 " NETWORK=%s" \
                 " CLIENTTAGDENY=%s"
 
-#define FEATURESVALUES1 feature_int(FEAT_MAXSILES), MAXMODEPARAMS, \
-			feature_int(FEAT_MAXCHANNELSPERUSER), \
-                        feature_int(FEAT_MAXBANS), feature_int(FEAT_NICKLEN), \
-                        feature_int(FEAT_CHATHISTORY_MAX)
+#define FEATURESVALUES1 feature_int(FEAT_MAXSILES)
 
-#define FEATURESVALUES2 NICKLEN, TOPICLEN, AWAYLEN, TOPICLEN, \
-                        feature_int(FEAT_CHANNELLEN), CHANNELLEN, \
+#define FEATURESVALUES2 MAXMODEPARAMS, \
+                        feature_int(FEAT_MAXCHANNELSPERUSER), \
+                        feature_int(FEAT_MAXBANS), feature_int(FEAT_NICKLEN), \
+                        NICKLEN, TOPICLEN, AWAYLEN, TOPICLEN, \
+                        feature_int(FEAT_CHANNELLEN), CHANNELLEN
+
+#define FEATURESVALUES3 \
                         (feature_bool(FEAT_LOCAL_CHANNELS) ? "#&" : "#"), "(ov)@+", "@+", \
                         (feature_bool(FEAT_OPLEVELS) \
-                        ? "b,AkU,jlH,imnpstrDdRcCuMZ" \
-                        :   "b,k,jlH,imnpstrDdRcCuMZ"), \
+                        ? "be,AkU,jlH,imnpstrDdRcCuMZK" \
+                        :   "be,k,jlH,imnpstrDdRcCuMZK"), \
                         "rfc1459", feature_str(FEAT_NETWORK), \
                         feature_str(FEAT_CLIENTTAGDENY)
 

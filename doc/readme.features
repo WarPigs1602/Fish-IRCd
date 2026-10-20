@@ -433,6 +433,14 @@ change this value, but if you do, consider the fact that users whose
 clients do not support NOSPOOF will have to type /QUOTE PING <big
 number> before registration.
 
+MAXIMUM_LINKS
+ * Type: integer
+ * Default: 1
+
+Maximum number of links for the built-in default connection class. This
+does not override limits configured explicitly in Class blocks. Leave it
+at 1 unless you specifically need to change the default class.
+
 PINGFREQUENCY
  * Type: integer
  * Default: 120
@@ -776,6 +784,14 @@ HIS_WEBIRC
 As per UnderNet CFV-165, this disables display of WebIRC status in
 /WHOIS replies (unless the client is asking about itself) and the
 ^ prefix for WebIRC usernames.
+
+HIS_GLINE
+ * Type: boolean
+ * Default: TRUE
+
+Retained for compatibility with snircd feature configurations. It is
+currently not used to control any server behavior. Use HIS_USERGLINE to
+hide the user-facing GLINE listing command.
 
 HIS_WHOIS_SERVERNAME
  * Type: boolean

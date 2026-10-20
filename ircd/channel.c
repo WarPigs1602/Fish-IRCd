@@ -957,6 +957,8 @@ void channel_modes(struct Client *cptr, char *mbuf, char *pbuf, int buflen,
     *mbuf++ = 'M';
   if (chptr->mode.mode & MODE_NOMULTITARGET)
     *mbuf++ = 'T';
+  if (chptr->mode.mode & MODE_NOKNOCK)
+    *mbuf++ = 'K';
   if (MyUser(cptr) && (chptr->mode.mode & MODE_TLSINSECURE))
     *mbuf++ = 'z';
   else if (chptr->mode.mode & MODE_TLSONLY)
@@ -1228,7 +1230,7 @@ void send_channel_modes(struct Client *cptr, struct Channel *chptr)
       /* Attach all bans, space separated " :%ban ban ..." */
       for (first = 2; lp2; lp2 = lp2->next)
       {
-        len = strlen(lp2->banstr);
+        len = strlen(lp2->banstr) + ((lp2->flags & BAN_EXCEPTION) ? 1 : 0);
 	if (msgq_bufleft(mb) < len + 1 + first)
           /* The +1 stands for the added ' '.
            * The +first stands for the added ":%".
@@ -1237,7 +1239,8 @@ void send_channel_modes(struct Client *cptr, struct Channel *chptr)
           full = 1;
           break;
         }
-	msgq_append(&me, mb, " %s%s", first ? ":%" : "",
+	msgq_append(&me, mb, " %s%s%s", first ? ":%" : "",
+		    (lp2->flags & BAN_EXCEPTION) ? "~" : "",
 		    lp2->banstr);
 	first = 0;
       }
@@ -1363,7 +1366,8 @@ char *pretty_mask(char *mask)
  * @param cptr	Client to send the banlist to.
  * @param chptr	Channel whose banlist to send.
  */
-static void send_ban_list(struct Client* cptr, struct Channel* chptr)
+static void send_ban_list(struct Client* cptr, struct Channel* chptr,
+                          int exceptions)
 {
   struct Ban* lp;
 
@@ -1371,10 +1375,12 @@ static void send_ban_list(struct Client* cptr, struct Channel* chptr)
   assert(0 != chptr);
 
   for (lp = chptr->banlist; lp; lp = lp->next)
-    send_reply(cptr, RPL_BANLIST, chptr->chname, lp->banstr,
-	       lp->who, lp->when);
+    if (((lp->flags & BAN_EXCEPTION) != 0) == (exceptions != 0))
+      send_reply(cptr, exceptions ? RPL_EXCEPTLIST : RPL_BANLIST,
+                 chptr->chname, lp->banstr, lp->who, lp->when);
 
-  send_reply(cptr, RPL_ENDOFBANLIST, chptr->chname);
+  send_reply(cptr, exceptions ? RPL_ENDOFEXCEPTLIST : RPL_ENDOFBANLIST,
+             chptr->chname);
 }
 
 /** Get a channel block, creating if necessary.
@@ -1670,7 +1676,7 @@ static int
 modebuf_flush_int(struct ModeBuf *mbuf, int all)
 {
   /* we only need the flags that don't take args right now */
-  static int flags[] = {
+  static chmode_t flags[] = {
 /*  MODE_CHANOP,	'o', */
 /*  MODE_VOICE,		'v', */
     MODE_PRIVATE,	'p',
@@ -1688,6 +1694,7 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
     MODE_NOPARTMSGS,    'u',
     MODE_MODERATENOREG, 'M',
     MODE_NOMULTITARGET, 'T',
+    MODE_NOKNOCK,       'K',
     MODE_TLSONLY,       'Z',
 /*  MODE_KEY,		'k', */
 /*  MODE_BAN,		'b', */
@@ -1698,23 +1705,23 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
 /*  MODE_UPASS,		'U', */
     0x0, 0x0
   };
-  static int local_flags[] = {
+  static chmode_t local_flags[] = {
     MODE_WASDELJOINS,   'd',
     MODE_TLSINSECURE,   'z',  /* Local clients see 'z' for insecure TLS */
     0x0, 0x0
   };
-  static int global_flags[] = {
+  static chmode_t global_flags[] = {
     MODE_TLSINSECURE,   'Z',  /* Servers propagate 'Z' for insecure TLS */
     0x0, 0x0
   };
   int i;
-  int *flag_p;
+  chmode_t *flag_p;
 
   struct Client *app_source; /* where the MODE appears to come from */
 
-  char addbuf[20], addbuf_local[20], addbuf_global[20]; /* accumulates +psmtin, etc. */
+  char addbuf[32], addbuf_local[32], addbuf_global[32]; /* accumulates +psmtin, etc. */
   int addbuf_i = 0, addbuf_local_i = 0, addbuf_global_i = 0;
-  char rembuf[20], rembuf_local[20], rembuf_global[20]; /* accumulates -psmtin, etc. */
+  char rembuf[32], rembuf_local[32], rembuf_global[32]; /* accumulates -psmtin, etc. */
   int rembuf_i = 0, rembuf_local_i = 0, rembuf_global_i = 0;
   char *bufptr; /* we make use of indirection to simplify the code */
   int *bufptr_i;
@@ -1733,9 +1740,9 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
   char jfbuf[24]; /* join flood parameter, "joins:seconds" */
   char hbuf[24]; /* history parameter, "lines:time" */
 
-  unsigned int limitdel = MODE_LIMIT;
-  unsigned int jfdel = MODE_JOINFLOOD;
-  unsigned int hdel = MODE_HISTORY;
+  chmode_t limitdel = MODE_LIMIT;
+  chmode_t jfdel = MODE_JOINFLOOD;
+  chmode_t hdel = MODE_HISTORY;
 
   assert(0 != mbuf);
 
@@ -1848,20 +1855,23 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
 	bufptr[(*bufptr_i)++] = MB_TYPE(mbuf, i) & MODE_CHANOP ? 'o' : 'v';
 	totalbuflen -= IRCD_MAX(9, tmp) + 1;
       }
-    } else if (MB_TYPE(mbuf, i) & (MODE_BAN | MODE_APASS | MODE_UPASS)) {
+    } else if (MB_TYPE(mbuf, i) & (MODE_BAN | MODE_EXCEPT | MODE_APASS | MODE_UPASS)) {
       tmp = strlen(MB_STRING(mbuf, i));
 
       if ((totalbuflen - tmp) <= 0) /* don't overflow buffer */
 	MB_TYPE(mbuf, i) |= MODE_SAVE; /* save for later */
       else {
 	char mode_char;
-	switch(MB_TYPE(mbuf, i) & (MODE_BAN | MODE_APASS | MODE_UPASS))
+	switch(MB_TYPE(mbuf, i) & (MODE_BAN | MODE_EXCEPT | MODE_APASS | MODE_UPASS))
 	{
 	  case MODE_APASS:
 	    mode_char = 'A';
 	    break;
 	  case MODE_UPASS:
 	    mode_char = 'U';
+	    break;
+	  case MODE_EXCEPT:
+	    mode_char = 'e';
 	    break;
 	  default:
 	    mode_char = 'b';
@@ -1954,7 +1964,7 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
 	build_string(strptr, strptr_i, cli_name(MB_CLIENT(mbuf, i)), 0, ' ');
 
       /* deal with bans... */
-      else if (MB_TYPE(mbuf, i) & MODE_BAN)
+      else if (MB_TYPE(mbuf, i) & (MODE_BAN | MODE_EXCEPT))
 	build_string(strptr, strptr_i, MB_STRING(mbuf, i), 0, ' ');
 
       /* deal with keys... */
@@ -2070,7 +2080,7 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
 	build_string(strptr, strptr_i, NumNick(MB_CLIENT(mbuf, i)), ' ');
 
       /* deal with modes that take strings */
-      else if (MB_TYPE(mbuf, i) & (MODE_KEY | MODE_BAN | MODE_APASS | MODE_UPASS))
+      else if (MB_TYPE(mbuf, i) & (MODE_KEY | MODE_BAN | MODE_EXCEPT | MODE_APASS | MODE_UPASS))
 	build_string(strptr, strptr_i, MB_STRING(mbuf, i), 0, ' ');
 
       /*
@@ -2207,14 +2217,14 @@ modebuf_init(struct ModeBuf *mbuf, struct Client *source,
  * @param mode		MODE_ADD or MODE_DEL OR'd with MODE_PRIVATE etc.
  */
 void
-modebuf_mode(struct ModeBuf *mbuf, unsigned int mode)
+modebuf_mode(struct ModeBuf *mbuf, chmode_t mode)
 {
   assert(0 != mbuf);
   assert(0 != (mode & (MODE_ADD | MODE_DEL)));
 
   mode &= (MODE_ADD | MODE_DEL | MODE_PRIVATE | MODE_SECRET | MODE_MODERATED |
 	   MODE_TOPICLIMIT | MODE_INVITEONLY | MODE_NOPRIVMSGS | MODE_REGONLY |
-	   MODE_NOCOLOR | MODE_NOCTCP | MODE_NONOTICE | MODE_NOPARTMSGS | MODE_MODERATENOREG | MODE_NOMULTITARGET | MODE_TLSONLY |
+	   MODE_NOCOLOR | MODE_NOCTCP | MODE_NONOTICE | MODE_NOPARTMSGS | MODE_MODERATENOREG | MODE_NOMULTITARGET | MODE_NOKNOCK | MODE_TLSONLY |
 	   MODE_TLSINSECURE | MODE_DELJOINS | MODE_WASDELJOINS | MODE_REGISTERED);
 
   if (!(mode & ~(MODE_ADD | MODE_DEL))) /* don't add empty modes... */
@@ -2240,7 +2250,7 @@ modebuf_mode(struct ModeBuf *mbuf, unsigned int mode)
  * @param uint		The argument to the mode.
  */
 void
-modebuf_mode_uint(struct ModeBuf *mbuf, unsigned int mode, unsigned int uint)
+modebuf_mode_uint(struct ModeBuf *mbuf, chmode_t mode, unsigned int uint)
 {
   assert(0 != mbuf);
   assert(0 != (mode & (MODE_ADD | MODE_DEL)));
@@ -2270,7 +2280,7 @@ modebuf_mode_uint(struct ModeBuf *mbuf, unsigned int mode, unsigned int uint)
  * @param free		If the string should be free'd later.
  */
 void
-modebuf_mode_string(struct ModeBuf *mbuf, unsigned int mode, char *string,
+modebuf_mode_string(struct ModeBuf *mbuf, chmode_t mode, char *string,
 		    int free)
 {
   assert(0 != mbuf);
@@ -2296,7 +2306,7 @@ modebuf_mode_string(struct ModeBuf *mbuf, unsigned int mode, char *string,
  * @param oplevel       The oplevel the user had or will have
  */
 void
-modebuf_mode_client(struct ModeBuf *mbuf, unsigned int mode,
+modebuf_mode_client(struct ModeBuf *mbuf, chmode_t mode,
 		    struct Client *client, int oplevel)
 {
   assert(0 != mbuf);
@@ -2332,7 +2342,7 @@ modebuf_flush(struct ModeBuf *mbuf)
 void
 modebuf_extract(struct ModeBuf *mbuf, char *buf)
 {
-  static int flags[] = {
+  static chmode_t flags[] = {
 /*  MODE_CHANOP,	'o', */
 /*  MODE_VOICE,		'v', */
     MODE_PRIVATE,	'p',
@@ -2357,12 +2367,13 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
     MODE_NOPARTMSGS,    'u',
     MODE_MODERATENOREG, 'M',
     MODE_NOMULTITARGET, 'T',
+    MODE_NOKNOCK,       'K',
     MODE_TLSONLY,       'Z',
     0x0, 0x0
   };
-  unsigned int add;
+  chmode_t add;
   int i, bufpos = 0, len;
-  int *flag_p;
+  chmode_t *flag_p;
   char *key = 0, limitbuf[20], jfbuf[24], hbuf[24];
   char *apass = 0, *upass = 0;
 
@@ -2480,9 +2491,9 @@ struct ParseState {
   char **parv;
   unsigned int flags;
   unsigned int dir;
-  unsigned int done;
-  unsigned int add;
-  unsigned int del;
+  chmode_t done;
+  chmode_t add;
+  chmode_t del;
   int args_used;
   int max_args;
   int numbans;
@@ -2519,7 +2530,7 @@ send_notoper(struct ParseState *state)
  * @param flag_p	?
  */
 static void
-mode_parse_limit(struct ParseState *state, int *flag_p)
+mode_parse_limit(struct ParseState *state, chmode_t *flag_p)
 {
   unsigned int t_limit;
 
@@ -2589,7 +2600,7 @@ mode_parse_limit(struct ParseState *state, int *flag_p)
  * @param flag_p	Flag table entry for +j.
  */
 static void
-mode_parse_joinflood(struct ParseState *state, int *flag_p)
+mode_parse_joinflood(struct ParseState *state, chmode_t *flag_p)
 {
   unsigned int joins, secs, packed, max_joins, max_secs;
   char *arg, *colon;
@@ -2679,7 +2690,7 @@ mode_parse_joinflood(struct ParseState *state, int *flag_p)
  * @param flag_p	Flag table entry for +H.
  */
 static void
-mode_parse_history(struct ParseState *state, int *flag_p)
+mode_parse_history(struct ParseState *state, chmode_t *flag_p)
 {
   unsigned int lines, hours, packed, max_lines, max_hours;
   char *arg;
@@ -2798,7 +2809,7 @@ is_clean_key(struct ParseState *state, char *s, char *command)
  * Helper function to convert keys
  */
 static void
-mode_parse_key(struct ParseState *state, int *flag_p)
+mode_parse_key(struct ParseState *state, chmode_t *flag_p)
 {
   char *t_str;
 
@@ -2885,7 +2896,7 @@ mode_parse_key(struct ParseState *state, int *flag_p)
  * Helper function to convert user passes
  */
 static void
-mode_parse_upass(struct ParseState *state, int *flag_p)
+mode_parse_upass(struct ParseState *state, chmode_t *flag_p)
 {
   char *t_str;
 
@@ -3004,7 +3015,7 @@ mode_parse_upass(struct ParseState *state, int *flag_p)
  * Helper function to convert admin passes
  */
 static void
-mode_parse_apass(struct ParseState *state, int *flag_p)
+mode_parse_apass(struct ParseState *state, chmode_t *flag_p)
 {
   struct Membership *memb;
   char *t_str;
@@ -3162,11 +3173,15 @@ mode_parse_apass(struct ParseState *state, int *flag_p)
  * @return Zero if \a old_ban is a superset of \a new_ban, non-zero otherwise.
  */
 static int
-bmatch(struct Ban *old_ban, struct Ban *new_ban)
+bmatch(struct Ban *old_ban, struct Ban *new_ban, int separate)
 {
   int res;
   assert(old_ban != NULL);
   assert(new_ban != NULL);
+  /* Channel bans and exceptions are independent lists. */
+  if (separate
+      && ((old_ban->flags ^ new_ban->flags) & BAN_EXCEPTION))
+    return 1;
   /* A ban is never treated as a superset of an exception. */
   if (!(old_ban->flags & BAN_EXCEPTION)
       && (new_ban->flags & BAN_EXCEPTION))
@@ -3204,7 +3219,8 @@ bmatch(struct Ban *old_ban, struct Ban *new_ban)
  * @param[in] do_free If non-zero, free \a newban on failure.
  * @return Zero if \a newban could be applied, non-zero if not.
  */
-int apply_ban(struct Ban **banlist, struct Ban *newban, int do_free)
+static int apply_ban_ex(struct Ban **banlist, struct Ban *newban, int do_free,
+                        int separate)
 {
   struct Ban *ban;
 
@@ -3212,7 +3228,7 @@ int apply_ban(struct Ban **banlist, struct Ban *newban, int do_free)
   if (newban->flags & BAN_ADD) {
     /* If a less specific *active* entry is found, fail.  */
     for (ban = *banlist; ban; ban = ban->next) {
-      if (!bmatch(ban, newban) && !(ban->flags & BAN_DEL)) {
+      if (!bmatch(ban, newban, separate) && !(ban->flags & BAN_DEL)) {
         if (do_free)
           free_ban(newban);
         return 1;
@@ -3220,7 +3236,7 @@ int apply_ban(struct Ban **banlist, struct Ban *newban, int do_free)
     }
     /* Mark more specific entries and add this one to the end of the list. */
     while ((ban = *banlist) != NULL) {
-      if (!bmatch(newban, ban)) {
+      if (!bmatch(newban, ban, separate)) {
         ban->flags |= BAN_OVERLAPPED | BAN_DEL;
       }
       banlist = &ban->next;
@@ -3231,7 +3247,7 @@ int apply_ban(struct Ban **banlist, struct Ban *newban, int do_free)
     size_t remove_count = 0;
     /* Mark more specific entries. */
     for (ban = *banlist; ban; ban = ban->next) {
-      if (!bmatch(newban, ban)) {
+      if (!bmatch(newban, ban, separate)) {
         ban->flags |= BAN_OVERLAPPED | BAN_DEL;
         remove_count++;
       }
@@ -3248,18 +3264,23 @@ int apply_ban(struct Ban **banlist, struct Ban *newban, int do_free)
   return 4;
 }
 
+int apply_ban(struct Ban **banlist, struct Ban *newban, int do_free)
+{
+  return apply_ban_ex(banlist, newban, do_free, 0);
+}
+
 /*
  * Helper function to convert bans
  */
 static void
-mode_parse_ban(struct ParseState *state, int *flag_p)
+mode_parse_ban(struct ParseState *state, chmode_t *flag_p)
 {
   char *t_str, *s;
   struct Ban *ban, *newban;
 
   if (state->parc <= 0) { /* Not enough args, send ban list */
     if (MyUser(state->sptr) && !(state->done & DONE_BANLIST)) {
-      send_ban_list(state->sptr, state->chptr);
+      send_ban_list(state->sptr, state->chptr, *flag_p == MODE_EXCEPT);
       state->done |= DONE_BANLIST;
     }
 
@@ -3284,8 +3305,9 @@ mode_parse_ban(struct ParseState *state, int *flag_p)
 
   if (!*t_str || *t_str == ':') { /* warn if empty */
     if (MyUser(state->sptr))
-      need_more_params(state->sptr, state->dir == MODE_ADD ? "MODE +b" :
-		       "MODE -b");
+      need_more_params(state->sptr, state->dir == MODE_ADD ?
+		       (*flag_p == MODE_EXCEPT ? "MODE +e" : "MODE +b") :
+		       (*flag_p == MODE_EXCEPT ? "MODE -e" : "MODE -b"));
     return;
   }
 
@@ -3304,7 +3326,7 @@ mode_parse_ban(struct ParseState *state, int *flag_p)
   set_ban_mask(newban, collapse(pretty_mask(t_str)));
   ircd_strncpy(newban->who, IsUser(state->sptr) ? cli_name(state->sptr) : "*", NICKLEN);
   newban->when = TStime();
-  apply_ban(&state->chptr->banlist, newban, 0);
+  apply_ban_ex(&state->chptr->banlist, newban, 0, 1);
 }
 
 /*
@@ -3338,7 +3360,8 @@ mode_process_bans(struct ParseState *state)
     } else if (ban->flags & BAN_DEL) { /* Deleted a ban? */
       char *bandup;
       DupString(bandup, ban->banstr);
-      modebuf_mode_string(state->mbuf, MODE_DEL | MODE_BAN,
+      modebuf_mode_string(state->mbuf, MODE_DEL |
+			  ((ban->flags & BAN_EXCEPTION) ? MODE_EXCEPT : MODE_BAN),
 			  bandup, 1);
 
       if (state->flags & MODE_PARSE_SET) { /* Ok, make it take effect */
@@ -3354,7 +3377,7 @@ mode_process_bans(struct ParseState *state)
 	changed++;
 	continue; /* next ban; keep prevban like it is */
       } else
-	ban->flags &= BAN_IPMASK; /* unset other flags */
+	ban->flags &= BAN_IPMASK | BAN_EXCEPTION; /* unset other flags */
     } else if (ban->flags & BAN_ADD) { /* adding a ban? */
       if (prevban)
 	prevban->next = 0; /* Break the list; ban isn't a real ban */
@@ -3379,14 +3402,15 @@ mode_process_bans(struct ParseState *state)
           char *bandup;
 	  /* add the ban to the buffer */
           DupString(bandup, ban->banstr);
-	  modebuf_mode_string(state->mbuf, MODE_ADD | MODE_BAN,
+	  modebuf_mode_string(state->mbuf, MODE_ADD |
+			      ((ban->flags & BAN_EXCEPTION) ? MODE_EXCEPT : MODE_BAN),
 			      bandup, 1);
 
 	  if (state->flags & MODE_PARSE_SET) { /* create a new ban */
 	    newban = make_ban(ban->banstr);
             strcpy(newban->who, ban->who);
 	    newban->when = ban->when;
-	    newban->flags = ban->flags & BAN_IPMASK;
+	    newban->flags = ban->flags & (BAN_IPMASK | BAN_EXCEPTION);
 
 	    newban->next = state->chptr->banlist; /* and link it in */
 	    state->chptr->banlist = newban;
@@ -3408,7 +3432,7 @@ mode_process_bans(struct ParseState *state)
  * Helper function to process client changes
  */
 static void
-mode_parse_client(struct ParseState *state, int *flag_p)
+mode_parse_client(struct ParseState *state, chmode_t *flag_p)
 {
   char *t_str;
   char *colon;
@@ -3614,7 +3638,7 @@ mode_process_clients(struct ParseState *state)
  * Helper function to process the simple modes
  */
 static void
-mode_parse_mode(struct ParseState *state, int *flag_p)
+mode_parse_mode(struct ParseState *state, chmode_t *flag_p)
 {
   /* If they're not an oper, they can't change modes */
   if (state->flags & (MODE_PARSE_NOTOPER | MODE_PARSE_NOTMEMBER)) {
@@ -3670,7 +3694,7 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
 	   struct Channel *chptr, int parc, char *parv[], unsigned int flags,
 	   struct Membership* member)
 {
-  static int chan_flags[] = {
+  static chmode_t chan_flags[] = {
     MODE_CHANOP,	'o',
     MODE_VOICE,		'v',
     MODE_PRIVATE,	'p',
@@ -3684,6 +3708,7 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
     MODE_UPASS,		'U',
     MODE_REGISTERED,	'R',
     MODE_BAN,		'b',
+    MODE_EXCEPT,	'e',
     MODE_LIMIT,		'l',
     MODE_JOINFLOOD,	'j',
     MODE_HISTORY,	'H',
@@ -3695,14 +3720,15 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
     MODE_NOPARTMSGS,    'u',
     MODE_MODERATENOREG, 'M',
     MODE_NOMULTITARGET, 'T',
+    MODE_NOKNOCK,       'K',
     MODE_TLSONLY,       'Z',
     MODE_ADD,		'+',
     MODE_DEL,		'-',
     0x0, 0x0
   };
   int i;
-  int *flag_p;
-  unsigned int t_mode;
+  chmode_t *flag_p;
+  chmode_t t_mode;
   char *modestr;
   struct ParseState state;
 
@@ -3784,7 +3810,8 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
 	mode_parse_upass(&state, flag_p);
 	break;
 
-      case 'b': /* deal with bans */
+      case 'b': /* deal with bans and ban exceptions */
+      case 'e':
 	mode_parse_ban(&state, flag_p);
 	break;
 
@@ -3953,7 +3980,7 @@ channel_set_auto_modes(struct Channel *chptr, char *modes,
                        size_t modes_len)
 {
   static const struct {
-    unsigned int mode;
+    chmode_t mode;
     char letter;
   } channel_modes[] = {
     { MODE_PRIVATE, 'p' },
@@ -3969,11 +3996,12 @@ channel_set_auto_modes(struct Channel *chptr, char *modes,
     { MODE_DELJOINS, 'D' },
     { MODE_NOPARTMSGS, 'u' },
     { MODE_NOMULTITARGET, 'T' },
+    { MODE_NOKNOCK, 'K' },
     { MODE_MODERATENOREG, 'M' }
   };
   const char *configured = feature_str(FEAT_AUTOCHANMODES_LIST);
   unsigned int count = 0;
-  unsigned int seen = 0;
+  chmode_t seen = 0;
   const char *letter;
   unsigned int i;
 

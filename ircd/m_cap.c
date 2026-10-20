@@ -26,9 +26,11 @@
 
 #include "config.h"
 
+#include "capab.h"
 #include "client.h"
 #include "ircd.h"
 #include "ircd_chattr.h"
+#include "ircd_features.h"
 #include "ircd_log.h"
 #include "ircd_reply.h"
 #include "ircd_snprintf.h"
@@ -62,6 +64,15 @@ static struct capabilities {
 };
 
 #define CAPAB_LIST_LEN	(sizeof(capab_list) / sizeof(struct capabilities))
+
+static int
+capab_available(const struct capabilities *cap)
+{
+  if (cap->config != 0 && !feature_bool(cap->config))
+    return 0;
+
+  return cap->cap != CAP_CHATHISTORY || feature_bool(FEAT_CAP_BATCH);
+}
 
 void cap_set_value(enum Capab cap, const char *value)
 {
@@ -206,8 +217,8 @@ send_caplist(struct Client *sptr, capset_t set,
     if (!set && !strcmp(subcmd, "LIST"))
       break;
 
-    /* Check if the capability is enabled in features() */
-    if (capab_list[i].config != 0 && !feature_bool(capab_list[i].config))
+    /* Check if the capability and its dependencies are enabled. */
+    if (!capab_available(&capab_list[i]))
       continue;
 
     /* Check if capability is hidden from IRCv3.2 clients */
@@ -310,7 +321,7 @@ cap_req(struct Client *sptr, const char *caplist)
       break;
 
     if (!(cap = find_cap(&cl, &neg)) /* look up capability... */
-        || (cap->config != 0 && !feature_bool(cap->config)) /* is it deactivated in config? */
+        || !capab_available(cap) /* is it unavailable? */
         || (!neg && (cap->flags & CAPFL_PROHIBIT)) /* is it prohibited? */
         || (neg && (cap->flags & CAPFL_STICKY)) /* is it sticky? */
         || (neg && HasFlag(sptr, FLAG_CAP302) && (cap->flags & CAPFL_STICKY_302))) { /* is it sticky for IRCv3.2? */

@@ -72,6 +72,7 @@ ircd_SOURCES = \
 	m_jupe.c \
 	m_kick.c \
 	m_kill.c \
+	m_knock.c \
 	m_links.c \
 	m_list.c \
 	m_lusers.c \

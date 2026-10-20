@@ -111,7 +111,7 @@ static int
 do_clearmode(struct Client *cptr, struct Client *sptr, struct Channel *chptr,
 	     char *control)
 {
-  static int flags[] = {
+  static chmode_t flags[] = {
     MODE_CHANOP,	'o',
     MODE_VOICE,		'v',
     MODE_PRIVATE,	'p',
@@ -122,6 +122,7 @@ do_clearmode(struct Client *cptr, struct Client *sptr, struct Channel *chptr,
     MODE_NOPRIVMSGS,	'n',
     MODE_KEY,		'k',
     MODE_BAN,		'b',
+    MODE_EXCEPT,	'e',
     MODE_LIMIT,		'l',
     MODE_JOINFLOOD,	'j',
     MODE_HISTORY,	'H',
@@ -133,15 +134,16 @@ do_clearmode(struct Client *cptr, struct Client *sptr, struct Channel *chptr,
     MODE_NOPARTMSGS,    'u',
     MODE_MODERATENOREG, 'M',
     MODE_NOMULTITARGET, 'T',
+    MODE_NOKNOCK,       'K',
     MODE_TLSONLY,       'Z',
     0x0, 0x0
   };
-  int *flag_p;
-  unsigned int del_mode = 0;
-  char control_buf[20];
+  chmode_t *flag_p;
+  chmode_t del_mode = 0;
+  char control_buf[32];
   int control_buf_i = 0;
   struct ModeBuf mbuf;
-  struct Ban *link, *next;
+  struct Ban *link;
   struct Membership *member;
 
   /* Ok, so what are we supposed to get rid of? */
@@ -194,27 +196,33 @@ do_clearmode(struct Client *cptr, struct Client *sptr, struct Channel *chptr,
    * Go through and mark the bans for deletion; note that we can't
    * free them until after modebuf_* are done with them
    */
-  if (del_mode & MODE_BAN) {
-    for (link = chptr->banlist; link; link = next) {
+  if (del_mode & (MODE_BAN | MODE_EXCEPT)) {
+    struct Ban **lp_p = &chptr->banlist;
+
+    while ((link = *lp_p)) {
       char *bandup;
-      next = link->next;
+      chmode_t type = (link->flags & BAN_EXCEPTION) ? MODE_EXCEPT : MODE_BAN;
+
+      if (!(del_mode & type)) {
+	lp_p = &link->next;
+	continue;
+      }
 
       DupString(bandup, link->banstr);
-      modebuf_mode_string(&mbuf, MODE_DEL | MODE_BAN, /* delete ban */
+      modebuf_mode_string(&mbuf, MODE_DEL | type, /* delete ban/exception */
 			  bandup, 1);
+      *lp_p = link->next;
       free_ban(link);
     }
-
-    chptr->banlist = 0;
   }
 
   /* Deal with users on the channel */
-  if (del_mode & (MODE_BAN | MODE_CHANOP | MODE_VOICE))
+  if (del_mode & (MODE_BAN | MODE_EXCEPT | MODE_CHANOP | MODE_VOICE))
     for (member = chptr->members; member; member = member->next_member) {
       if (IsZombie(member)) /* we ignore zombies */
 	continue;
 
-      if (del_mode & MODE_BAN) /* If we cleared bans, clear the valid flags */
+      if (del_mode & (MODE_BAN | MODE_EXCEPT)) /* If we cleared bans, clear the valid flags */
 	ClearBanValid(member);
 
       /* Drop channel operator status */

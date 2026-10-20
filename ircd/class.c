@@ -106,7 +106,7 @@ void init_class(void)
   ConFreq(connClassList)  = feature_int(FEAT_CONNECTFREQUENCY);
   MaxSendq(connClassList) = feature_int(FEAT_DEFAULTMAXSENDQLENGTH);
   MaxFlood(connClassList) = feature_int(FEAT_CLIENT_FLOOD);
-  MaxLinks(connClassList) = 1;
+  MaxLinks(connClassList) = feature_int(FEAT_MAXIMUM_LINKS);
   connClassList->valid    = 1;
   Links(connClassList)    = 1;
 }

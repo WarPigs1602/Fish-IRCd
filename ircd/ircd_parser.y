@@ -133,8 +133,8 @@ permitted(enum ConfigBlock type)
   static const char *block_names[BLOCK_LAST_BLOCK+1] = {
     "Admin", "Class", "Client", "Connect", "CRule", "Features",
     "General", "IAuth", "Include", "Jupe", "Kill", "Motd", "Oper",
-    "Port", "Pseudo", "Quarantine", "UWorld", "IAuth", "IPCheck",
-    NULL
+    "Port", "Pseudo", "Quarantine", "UWorld", "WebIRC", "IPCheck",
+    "Spoofhost", NULL
   };
 
   if (lexer_allowed(type))

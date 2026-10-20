@@ -382,6 +382,12 @@ int ms_burst(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
 
 	for (ban = ircd_strtok(&p, banlist, " "); ban;
 	     ban = ircd_strtok(&p, 0, " ")) {
+	  int is_exc = 0;
+
+	  if (*ban == '~') { /* ban exception */
+	    is_exc = 1;
+	    ban++;
+	  }
 	  ban = collapse(pretty_mask(ban));
 
 	    /*
@@ -393,7 +399,9 @@ int ms_burst(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
 	     * shown below *sigh*
 	     */
 	  for (lp = chptr->banlist; lp; lp = lp->next) {
-	    if (!ircd_strcmp(lp->banstr, ban)) {
+	    if (((lp->flags & BAN_EXCEPTION) != 0) != is_exc) {
+	      /* different list; no interaction */
+	    } else if (!ircd_strcmp(lp->banstr, ban)) {
 	      ban = 0; /* don't add ban */
 	      lp->flags &= ~BAN_BURST_WIPEOUT; /* not wiping out */
 	      break; /* new ban already existed; don't even repropagate */
@@ -416,13 +424,15 @@ int ms_burst(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
 	      banstr[banpos++] = '%';
 	    } else
 	      banstr[banpos++] = ' ';
+	    if (is_exc)
+	      banstr[banpos++] = '~';
 	    for (ptr = ban; *ptr; ptr++) /* add ban to buffer */
 	      banstr[banpos++] = *ptr;
 
 	    newban = make_ban(ban); /* create new ban */
             strcpy(newban->who, "*");
 	    newban->when = TStime();
-	    newban->flags |= BAN_BURSTED;
+	    newban->flags |= BAN_BURSTED | (is_exc ? BAN_EXCEPTION : 0);
 	    newban->next = 0;
 	    if (lp)
 	      lp->next = newban; /* link it in */
@@ -634,16 +644,18 @@ int ms_burst(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
       if (lp->flags & (BAN_OVERLAPPED | BAN_BURST_WIPEOUT)) {
         char *bandup;
         DupString(bandup, lp->banstr);
-	modebuf_mode_string(mbuf, MODE_DEL | MODE_BAN,
+	modebuf_mode_string(mbuf, MODE_DEL |
+			    ((lp->flags & BAN_EXCEPTION) ? MODE_EXCEPT : MODE_BAN),
 			    bandup, 1);
 	*lp_p = lp->next; /* clip out of list */
         free_ban(lp);
 	continue;
       } else if (lp->flags & BAN_BURSTED) /* add ban to channel */
-	modebuf_mode_string(mbuf, MODE_ADD | MODE_BAN,
+	modebuf_mode_string(mbuf, MODE_ADD |
+			    ((lp->flags & BAN_EXCEPTION) ? MODE_EXCEPT : MODE_BAN),
 			    lp->banstr, 0); /* don't free banstr */
 
-      lp->flags &= BAN_IPMASK; /* reset the flag */
+      lp->flags &= BAN_IPMASK | BAN_EXCEPTION; /* reset the flag */
       lp_p = &(*lp_p)->next;
     }
   }

@@ -270,8 +270,8 @@ extern const struct Numeric* get_error_numeric(int err);
 #define RPL_ISSUEDINVITE     345        /* Undernet extension */
 #define RPL_INVITELIST       346        /* IRCnet, Undernet extension */
 #define RPL_ENDOFINVITELIST  347        /* IRCnet, Undernet extension */
-/*      RPL_EXCEPTLIST       348           IRCnet extension */
-/*      RPL_ENDOFEXCEPTLIST  349           IRCnet extension */
+#define RPL_EXCEPTLIST       348
+#define RPL_ENDOFEXCEPTLIST  349
 
 #define RPL_VERSION          351
 #define RPL_WHOREPLY         352        /* See also RPL_ENDOFWHO */
@@ -410,7 +410,7 @@ extern const struct Numeric* get_error_numeric(int err);
 
 #define ERR_BADCHANNAME      479        /* EFNet extension */
                                         /* 479 Undernet extension badchan */
-/*	ERR_CANNOTKNOCK	     480	unreal */
+#define ERR_CANNOTKNOCK       480        /* IRCv3 KNOCK */
 /*	ERR_NOULINE	     480	austnet */
 #define ERR_NOPRIVILEGES     481
 #define ERR_CHANOPRIVSNEEDED 482
@@ -480,6 +480,11 @@ extern const struct Numeric* get_error_numeric(int err);
 #define ERR_NOMANAGER        566	/* Undernet extension */
 #define ERR_UPASS_SAME_APASS 567        /* Undernet extension */
 #define RPL_WHOISSECURE      671        /* Nefarious, Undernet */
+#define RPL_KNOCK            710        /* IRCv3 KNOCK */
+#define RPL_KNOCKDLVR        711        /* IRCv3 KNOCK */
+#define ERR_TOOMANYKNOCK     712        /* IRCv3 KNOCK */
+#define ERR_CHANOPEN         713        /* IRCv3 KNOCK */
+#define ERR_KNOCKONCHAN      714        /* IRCv3 KNOCK */
 
 /*	RPL_LOGON	     600	dalnet,unreal
 	RPL_LOGOFF           601	dalnet,unreal

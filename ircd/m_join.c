@@ -318,7 +318,8 @@ int m_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
     }
 
     do_names(sptr, chptr, NAMES_ALL|NAMES_EON); /* send /names list */
-    history_replay(sptr, chptr);
+    if (CapHas(cli_active(sptr), CAP_BATCH))
+      history_replay(sptr, chptr);
   }
 
   joinbuf_flush(&join); /* must be first, if there's a JOIN 0 */

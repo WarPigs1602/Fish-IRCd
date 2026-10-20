@@ -220,6 +220,10 @@ struct Client;
 #define TOK_JOIN                "J"
 #define CMD_JOIN		MSG_JOIN, TOK_JOIN
 
+#define MSG_KNOCK               "KNOCK"
+#define TOK_KNOCK               "KN"
+#define CMD_KNOCK		MSG_KNOCK, TOK_KNOCK
+
 #define MSG_PART                "PART"          /* PART */
 #define TOK_PART                "L"
 #define CMD_PART		MSG_PART, TOK_PART

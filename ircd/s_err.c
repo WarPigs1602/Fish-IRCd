@@ -728,9 +728,9 @@ static Numeric replyTable[] = {
 /* 347 */
   { RPL_ENDOFINVITELIST, ":End of Invite List", "347" },
 /* 348 */
-  { 0 },
+  { RPL_EXCEPTLIST, "%s %s %s %Tu", "348" },
 /* 349 */
-  { 0 },
+  { RPL_ENDOFEXCEPTLIST, "%s :End of Channel Exception List", "349" },
 /* 350 */
   { 0 },
 /* 351 */
@@ -992,7 +992,7 @@ static Numeric replyTable[] = {
 /* 479 */
   { ERR_BADCHANNAME, "%s :Cannot join channel (G-lined: %s)", "479" },
 /* 480 */
-  { 0 },
+  { ERR_CANNOTKNOCK, "%s :%s", "480" },
 /* 481 */
   { ERR_NOPRIVILEGES, ":Permission Denied: Insufficient privileges", "481" },
 /* 482 */
@@ -1452,15 +1452,15 @@ static Numeric replyTable[] = {
 /* 709 */
   { 0 },
 /* 710 */
-  { 0 },
+  { RPL_KNOCK, "%s %C!%s@%s :%s", "710" },
 /* 711 */
-  { 0 },
+  { RPL_KNOCKDLVR, "%s :Your KNOCK has been delivered", "711" },
 /* 712 */
-  { 0 },
+  { ERR_TOOMANYKNOCK, "%s :Too many KNOCKs (channel)", "712" },
 /* 713 */
-  { 0 },
+  { ERR_CHANOPEN, "%s :Channel is not invite-only", "713" },
 /* 714 */
-  { 0 },
+  { ERR_KNOCKONCHAN, "%s :You are already on that channel", "714" },
 /* 715 */
   { 0 },
 /* 716 */

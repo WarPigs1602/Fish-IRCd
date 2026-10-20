@@ -90,48 +90,47 @@ struct HistEntry;
 
 /* Channel Visibility macros */
 
-#define MODE_CHANOP     CHFL_CHANOP	/**< +o Chanop */
-#define MODE_VOICE      CHFL_VOICE	/**< +v Voice */
-#define MODE_PRIVATE    0x0004		/**< +p Private */
-#define MODE_SECRET     0x0008		/**< +s Secret */
-#define MODE_MODERATED  0x0010		/**< +m Moderated */
-#define MODE_TOPICLIMIT 0x0020		/**< +t Topic Limited */
-#define MODE_INVITEONLY 0x0040		/**< +i Invite only */
-#define MODE_NOPRIVMSGS 0x0080		/**< +n No Private Messages */
-#define MODE_KEY        0x0100		/**< +k Keyed */
-#define MODE_BAN        0x0200		/**< +b Ban */
-#define MODE_LIMIT      0x0400		/**< +l Limit */
-#define MODE_REGONLY    0x0800  	/**< Only +r users may join */
-#define MODE_DELJOINS   0x1000  	/**< New join messages are delayed */
-#define MODE_REGISTERED 0x2000  	/**< +R registered with services */
-#define MODE_NOCOLOR    0x4000          /**< +c No colors */
-#define MODE_NOCTCP     0x8000          /**< +C No CTCPs except ACTION */
-#define MODE_SAVE	0x20000		/**< save this mode-with-arg 'til
-					 * later */
-#define MODE_FREE	0x40000 	/**< string needs to be passed to
-					 * MyFree() */
-#define MODE_BURSTADDED	0x80000		/**< channel was created by a BURST */
-#define MODE_UPASS	0x100000
-#define MODE_APASS	0x200000
-#define MODE_WASDELJOINS 0x400000 	/**< Not DELJOINS, but some joins
-					 * pending */
-#define MODE_NOPARTMSGS 0x800000        /**< +u No part messages */
-#define MODE_MODERATENOREG 0x1000000    /**< +M Moderate unauthed users */
-#define MODE_TLSONLY       0x2000000    /**< +Z TLS users only */
-#define MODE_TLSINSECURE   0x4000000    /**< +z TLS insecure network path */
-#define MODE_NONOTICE      0x8000000    /**< +N No channel notices */
-#define MODE_NOMULTITARGET 0x10000000   /**< +T No multiple targets */
-#define MODE_JOINFLOOD     0x10000      /**< +j Join flood protection */
-#define MODE_HISTORY       0x80000000   /**< +H Channel history lines:hours */
+#define MODE_CHANOP        CHFL_CHANOP          /**< +o Chanop */
+#define MODE_VOICE         CHFL_VOICE           /**< +v Voice */
+#define MODE_PRIVATE       0x00000004           /**< +p Private */
+#define MODE_SECRET        0x00000008           /**< +s Secret */
+#define MODE_MODERATED     0x00000010           /**< +m Moderated */
+#define MODE_TOPICLIMIT    0x00000020           /**< +t Topic Limited */
+#define MODE_INVITEONLY    0x00000040           /**< +i Invite only */
+#define MODE_NOPRIVMSGS    0x00000080           /**< +n No Private Messages */
+#define MODE_KEY           0x00000100           /**< +k Keyed */
+#define MODE_BAN           0x00000200           /**< +b Ban */
+#define MODE_LIMIT         0x00000400           /**< +l Limit */
+#define MODE_REGONLY       0x00000800           /**< +r Only registered users may join */
+#define MODE_DELJOINS      0x00001000           /**< +D New join messages are delayed */
+#define MODE_REGISTERED    0x00002000           /**< +R Registered with services */
+#define MODE_NOCOLOR       0x00004000           /**< +c No colors */
+#define MODE_NOCTCP        0x00008000           /**< +C No CTCPs except ACTION */
+#define MODE_JOINFLOOD     0x00010000           /**< +j Join flood protection */
+#define MODE_SAVE          0x00020000           /**< Save this mode-with-arg 'til later */
+#define MODE_FREE          0x00040000           /**< String needs to be passed to MyFree() */
+#define MODE_BURSTADDED    0x00080000           /**< Channel was created by a BURST */
+#define MODE_UPASS         0x00100000           /**< +U User pass */
+#define MODE_APASS         0x00200000           /**< +A Admin pass */
+#define MODE_WASDELJOINS   0x00400000           /**< +d Not DELJOINS, but some joins pending */
+#define MODE_NOPARTMSGS    0x00800000           /**< +u No part messages */
+#define MODE_MODERATENOREG 0x01000000           /**< +M Moderate unauthed users */
+#define MODE_TLSONLY       0x02000000           /**< +Z TLS users only */
+#define MODE_TLSINSECURE   0x04000000           /**< +z TLS insecure network path */
+#define MODE_NONOTICE      0x08000000           /**< +N No channel notices */
+#define MODE_NOMULTITARGET 0x10000000           /**< +T No multiple targets */
+#define MODE_HISTORY       0x80000000ULL        /**< +H Channel history lines:hours */
+#define MODE_NOKNOCK       0x100000000ULL       /**< +K No KNOCK */
+#define MODE_EXCEPT        0x200000000ULL       /**< +e Ban exception */
 
 /** mode flags which take another parameter (With PARAmeterS)
  */
-#define MODE_WPARAS     (MODE_CHANOP|MODE_VOICE|MODE_BAN|MODE_KEY|MODE_LIMIT|MODE_APASS|MODE_UPASS|MODE_JOINFLOOD|MODE_HISTORY)
+#define MODE_WPARAS     (MODE_CHANOP|MODE_VOICE|MODE_BAN|MODE_EXCEPT|MODE_KEY|MODE_LIMIT|MODE_APASS|MODE_UPASS|MODE_JOINFLOOD|MODE_HISTORY)
 
 /** Available Channel modes */
-#define infochanmodes feature_bool(FEAT_OPLEVELS) ? "AbHijklmnopstUvrDdRcCuNMZzT" : "bHijklmnopstvrDdRcCuNMZzT"
+#define infochanmodes feature_bool(FEAT_OPLEVELS) ? "AbeHijklmnopstUvrDdRcCuNMZzTK" : "beHijklmnopstvrDdRcCuNMZzTK"
 /** Available Channel modes that take parameters */
-#define infochanmodeswithparams feature_bool(FEAT_OPLEVELS) ? "AbHjkloUv" : "bHjklov"
+#define infochanmodeswithparams feature_bool(FEAT_OPLEVELS) ? "AbeHjkloUv" : "beHjklov"
 
 #define HoldChannel(x)          (!(x))
 /** name invisible */
@@ -246,9 +245,12 @@ struct Membership {
 #define ClearDelayedJoin(x) ((x)->status &= ~CHFL_DELAYED)
 #define ClearDelayedTarget(x) ((x)->status &= ~CHFL_DELAYED_TARGET)
 
+/** Channel mode bit mask; 64 bits wide so that further modes fit. */
+typedef unsigned long long chmode_t;
+
 /** Mode information for a channel */
 struct Mode {
-  unsigned int mode;
+  chmode_t mode;
   unsigned int limit;
   unsigned int jf_joins;   /**< +j: joins allowed within jf_secs */
   unsigned int jf_secs;    /**< +j: length of the window in seconds */
@@ -294,6 +296,7 @@ struct Channel {
   struct Mode        mode;	   /**< This channels mode */
   time_t             jf_start;     /**< +j: start of current join window */
   unsigned int       jf_count;     /**< +j: local joins in current window */
+  time_t             knock_last;   /**< time of the last local KNOCK */
   struct HistEntry*  hist_head;    /**< +H: oldest stored message */
   struct HistEntry*  hist_tail;    /**< +H: newest stored message */
   unsigned int       hist_count;   /**< +H: number of stored messages */
@@ -320,15 +323,15 @@ struct ListingArgs {
 };
 
 struct ModeBuf {
-  unsigned int		mb_add;		/**< Modes to add */
-  unsigned int		mb_rem;		/**< Modes to remove */
+  chmode_t		mb_add;		/**< Modes to add */
+  chmode_t		mb_rem;		/**< Modes to remove */
   struct Client	       *mb_source;	/**< Source of MODE changes */
   struct Client	       *mb_connect;	/**< Connection of MODE changes */
   struct Channel       *mb_channel;	/**< Channel they affect */
   unsigned int		mb_dest;	/**< Destination of MODE changes */
   unsigned int		mb_count;	/**< Number of modes w/args */
   struct {
-    unsigned int	mbm_type;	/**< Type of argument */
+    chmode_t		mbm_type;	/**< Type of argument */
     union {
       unsigned int	mbma_uint;	/**< A limit */
       char	       *mbma_string;	/**< A string */
@@ -439,12 +442,12 @@ extern void channel_joinflood_note(struct Channel *chptr);
 extern void modebuf_init(struct ModeBuf *mbuf, struct Client *source,
 			 struct Client *connect, struct Channel *chan,
 			 unsigned int dest);
-extern void modebuf_mode(struct ModeBuf *mbuf, unsigned int mode);
-extern void modebuf_mode_uint(struct ModeBuf *mbuf, unsigned int mode,
+extern void modebuf_mode(struct ModeBuf *mbuf, chmode_t mode);
+extern void modebuf_mode_uint(struct ModeBuf *mbuf, chmode_t mode,
 			      unsigned int uint);
-extern void modebuf_mode_string(struct ModeBuf *mbuf, unsigned int mode,
+extern void modebuf_mode_string(struct ModeBuf *mbuf, chmode_t mode,
 				char *string, int free);
-extern void modebuf_mode_client(struct ModeBuf *mbuf, unsigned int mode,
+extern void modebuf_mode_client(struct ModeBuf *mbuf, chmode_t mode,
 				struct Client *client, int oplevel);
 extern int modebuf_flush(struct ModeBuf *mbuf);
 extern void modebuf_extract(struct ModeBuf *mbuf, char *buf);

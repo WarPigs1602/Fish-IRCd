@@ -2165,11 +2165,17 @@ send_supported(struct Client *cptr)
 {
   char featurebuf[512];
 
-  ircd_snprintf(0, featurebuf, sizeof(featurebuf), FEATURES1, FEATURESVALUES1);
+  if (feature_bool(FEAT_CAP_BATCH))
+    ircd_snprintf(0, featurebuf, sizeof(featurebuf),
+                  FEATURES1 " CHATHISTORY=%i", FEATURESVALUES1,
+                  feature_int(FEAT_CHATHISTORY_MAX));
+  else
+    ircd_snprintf(0, featurebuf, sizeof(featurebuf), FEATURES1, FEATURESVALUES1);
   send_reply(cptr, RPL_ISUPPORT, featurebuf);
   ircd_snprintf(0, featurebuf, sizeof(featurebuf), FEATURES2, FEATURESVALUES2);
   send_reply(cptr, RPL_ISUPPORT, featurebuf);
-
+    ircd_snprintf(0, featurebuf, sizeof(featurebuf), FEATURES3, FEATURESVALUES3);
+    send_reply(cptr, RPL_ISUPPORT, featurebuf);
   return 0; /* convenience return, if it's ever needed */
 }
 
