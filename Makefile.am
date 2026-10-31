@@ -30,8 +30,9 @@ EXTRA_DIST = \
     tests \
     tools \
     ircd-patch \
-    INSTALL \
-    INSTALL_FR \
+    INSTALL.md \
+    INSTALL_DE.md \
+    INSTALL_FR.md \
     LICENSE \
     RELEASE.NOTES \
     ChangeLog.11 \

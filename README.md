@@ -52,7 +52,7 @@ Review the configuration carefully before exposing the server to a network. In p
 "$HOME/bin/ircd" -n -d "$HOME/lib" -f ircd.conf
 ```
 
-Omit `-n` to let the server detach from the terminal. For a system-wide installation, choose an appropriate prefix (for example `/usr/local`) and install with the permissions required for that prefix. For further installation and configuration details, see [`INSTALL`](INSTALL) and [`doc/example.conf`](doc/example.conf).
+Omit `-n` to let the server detach from the terminal. For a system-wide installation, choose an appropriate prefix (for example `/usr/local`) and install with the permissions required for that prefix. For further installation and configuration details, see [`INSTALL.md`](INSTALL.md), the [German installation guide](INSTALL_DE.md), the [French installation guide](INSTALL_FR.md), and [`doc/example.conf`](doc/example.conf).
 
 ## Running the integration tests
 
@@ -74,7 +74,9 @@ The suite also supports pytest markers such as `single_server`, `multi_server`, 
 
 ## Documentation
 
-- [`INSTALL`](INSTALL) — build and installation notes.
+- [`INSTALL.md`](INSTALL.md) — build and installation notes.
+- [`INSTALL_DE.md`](INSTALL_DE.md) — Installationsanleitung auf Deutsch.
+- [`INSTALL_FR.md`](INSTALL_FR.md) — guide d'installation en français.
 - [`doc/example.conf`](doc/example.conf) — sample server configuration.
 - [`doc/`](doc/) — protocol, configuration, and platform documentation.
 - [`tests/README.md`](tests/README.md) — integration test guide.
