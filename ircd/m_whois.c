@@ -184,19 +184,15 @@ static void do_whois(struct Client* sptr, struct Client *acptr, int parc)
         if (HasCap(sptr, CAP_MULTI_PREFIX)) {
           if (IsDelayedJoin(chan) && (sptr != acptr))
             *(buf + len++) = '<';
-          if (IsChanOp(chan))
-            *(buf + len++) = '@';
-          if (HasVoice(chan))
-            *(buf + len++) = '+';
+          len += chan_prefix_string(chan, buf + len);
           if (IsZombie(chan))
             *(buf + len++) = '!';
         } else {
+          char pfx[8];
           if (IsDelayedJoin(chan) && (sptr != acptr))
             *(buf + len++) = '<';
-          else if (IsChanOp(chan))
-            *(buf + len++) = '@';
-          else if (HasVoice(chan))
-            *(buf + len++) = '+';
+          else if (chan_prefix_string(chan, pfx))
+            *(buf + len++) = pfx[0];
           else if (IsZombie(chan))
             *(buf + len++) = '!';
         }

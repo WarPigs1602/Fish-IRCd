@@ -240,6 +240,17 @@ do_clearmode(struct Client *cptr, struct Client *sptr, struct Channel *chptr,
 	member->status &= ~CHFL_CHANOP;
       }
 
+      /* Drop the optional prefix modes together with ops */
+      if (del_mode & MODE_CHANOP && !IsChannelService(member->user)) {
+	static const chmode_t ext[] = { MODE_CHSERV, MODE_OWNER, MODE_ADMIN, MODE_HALFOP };
+	int k;
+	for (k = 0; k < 4; k++)
+	  if (member->status & mode_to_chfl(ext[k])) {
+	    modebuf_mode_client(&mbuf, MODE_DEL | ext[k], member->user, MAXOPLEVEL + 1);
+	    member->status &= ~mode_to_chfl(ext[k]);
+	  }
+      }
+
       /* Drop voice */
       if (HasVoice(member) && del_mode & MODE_VOICE) {
 	modebuf_mode_client(&mbuf, MODE_DEL | MODE_VOICE, member->user, MAXOPLEVEL + 1);

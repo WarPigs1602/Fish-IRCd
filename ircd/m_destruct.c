@@ -164,6 +164,14 @@ int ms_destruct(struct Client* cptr, struct Client* sptr, int parc, char* parv[]
     {
       if (IsChanOp(member))
         modebuf_mode_client(&mbuf, MODE_DEL | MODE_CHANOP, member->user, OpLevel(member));
+      if (IsChanService(member))
+        modebuf_mode_client(&mbuf, MODE_DEL | MODE_CHSERV, member->user, MAXOPLEVEL + 1);
+      if (IsChanOwner(member))
+        modebuf_mode_client(&mbuf, MODE_DEL | MODE_OWNER, member->user, MAXOPLEVEL + 1);
+      if (IsChanAdmin(member))
+        modebuf_mode_client(&mbuf, MODE_DEL | MODE_ADMIN, member->user, MAXOPLEVEL + 1);
+      if (IsHalfOp(member))
+        modebuf_mode_client(&mbuf, MODE_DEL | MODE_HALFOP, member->user, MAXOPLEVEL + 1);
       if (HasVoice(member))
         modebuf_mode_client(&mbuf, MODE_DEL | MODE_VOICE, member->user, MAXOPLEVEL + 1);
     }

@@ -171,17 +171,15 @@ void do_names(struct Client* sptr, struct Channel* chptr, int filter)
     if (HasCap(sptr, CAP_MULTI_PREFIX)) {
       if (IsZombie(member))
         buf[idx++] = '!';
-      if (IsChanOp(member))
-        buf[idx++] = '@';
-      if (HasVoice(member))
-        buf[idx++] = '+';
+      idx += chan_prefix_string(member, buf + idx);
     } else {
       if (IsZombie(member))
         buf[idx++] = '!';
-      else if (IsChanOp(member))
-        buf[idx++] = '@';
-      else if (HasVoice(member))
-        buf[idx++] = '+';
+      else {
+        char pfx[8];
+        if (chan_prefix_string(member, pfx))
+          buf[idx++] = pfx[0];
+      }
     }
     strcpy(buf + idx, cli_name(c2ptr));
     idx += strlen(cli_name(c2ptr));

@@ -74,7 +74,7 @@
                         feature_int(FEAT_CHANNELLEN), CHANNELLEN
 
 #define FEATURESVALUES3 \
-                        (feature_bool(FEAT_LOCAL_CHANNELS) ? "#&" : "#"), "(ov)@+", "@+", \
+                        (feature_bool(FEAT_LOCAL_CHANNELS) ? "#&" : "#"), chan_isupport_prefix(), "@+", \
                         (feature_bool(FEAT_OPLEVELS) \
                         ? "be,AkU,jlH,imnpstrDdRcCuMZK" \
                         :   "be,k,jlH,imnpstrDdRcCuMZK"), \

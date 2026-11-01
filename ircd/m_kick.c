@@ -142,6 +142,10 @@ int m_kick(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
   if (!(member = find_member_link(chptr, who)) || IsZombie(member))
     return send_reply(sptr, ERR_USERNOTINCHANNEL, cli_name(who), chptr->chname);
 
+  /* Members with a higher prefix rank (+a, +q, +y) are protected. */
+  if (who != sptr && member_rank(member) > member_rank(member2))
+    return send_reply(sptr, ERR_CHANOPRIVSNEEDED, chptr->chname);
+
   /* Don't allow to kick member with a higher op-level,
    * or members with the same op-level unless both are MAXOPLEVEL.
    */
@@ -242,7 +246,7 @@ int ms_kick(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
     sendjointo_one(who, chptr, cptr);
 
     /* Reop/revoice member */
-    if (IsChanOp(member) || HasVoice(member)) {
+    if (IsChanOp(member) || HasVoice(member) || (member->status & CHFL_EXT_MASK)) {
       struct ModeBuf mbuf;
 
       modebuf_init(&mbuf, sptr, cptr, chptr,
@@ -252,6 +256,14 @@ int ms_kick(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
 
       if (IsChanOp(member))
 	modebuf_mode_client(&mbuf, MODE_DEL | MODE_CHANOP, who, OpLevel(member));
+      if (IsChanService(member))
+	modebuf_mode_client(&mbuf, MODE_DEL | MODE_CHSERV, who, MAXOPLEVEL + 1);
+      if (IsChanOwner(member))
+	modebuf_mode_client(&mbuf, MODE_DEL | MODE_OWNER, who, MAXOPLEVEL + 1);
+      if (IsChanAdmin(member))
+	modebuf_mode_client(&mbuf, MODE_DEL | MODE_ADMIN, who, MAXOPLEVEL + 1);
+      if (IsHalfOp(member))
+	modebuf_mode_client(&mbuf, MODE_DEL | MODE_HALFOP, who, MAXOPLEVEL + 1);
       if (HasVoice(member))
 	modebuf_mode_client(&mbuf, MODE_DEL | MODE_VOICE, who, MAXOPLEVEL + 1);
 

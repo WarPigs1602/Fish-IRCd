@@ -545,6 +545,15 @@ int ms_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
             modebuf_mode_client(&mbuf, MODE_DEL | MODE_CHANOP, member->user, OpLevel(member));
 	    member->status &= ~CHFL_CHANOP;
 	  }
+          if (member->status & CHFL_EXT_MASK) {
+            static const chmode_t ext[] = { MODE_OWNER, MODE_ADMIN, MODE_HALFOP };
+            int k;
+            for (k = 0; k < 3; k++)
+              if (member->status & mode_to_chfl(ext[k])) {
+                modebuf_mode_client(&mbuf, MODE_DEL | ext[k], member->user, OpLevel(member));
+                member->status &= ~mode_to_chfl(ext[k]);
+              }
+          }
           if (HasVoice(member)) {
             modebuf_mode_client(&mbuf, MODE_DEL | MODE_VOICE, member->user, OpLevel(member));
 	    member->status &= ~CHFL_VOICE;

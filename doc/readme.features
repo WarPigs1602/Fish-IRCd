@@ -1067,6 +1067,44 @@ passwords, respectively) on channels where they are marked as channel
 managers.  This feature must be disabled until all servers on the
 network are able to interpret and handle these modes correctly.
 
+CHMODE_SERVICE
+ * Type: boolean
+ * Default: FALSE
+
+Enables the optional channel user mode +y (prefix '!').  It is set
+automatically on channel services (+k users) when they join a channel and
+can only be set or removed by services and servers.  +y implies +o.
+
+CHMODE_OWNER
+ * Type: boolean
+ * Default: FALSE
+
+Enables the optional channel user mode +q (prefix '~', channel owner).  It
+can be set or removed by owners and services.  +q implies +o.
+
+CHMODE_ADMIN
+ * Type: boolean
+ * Default: FALSE
+
+Enables the optional channel user mode +a (prefix '&', channel admin).  It
+can be set or removed by admins, owners and services.  +a implies +o.
+
+CHMODE_HALFOP
+ * Type: boolean
+ * Default: FALSE
+
+Enables the optional channel user mode +h (prefix '%', half-op).  Half-ops
+may speak on moderated channels and may give or take +v.  Channel ops and
+higher can set or remove +h.
+
+The four CHMODE_* features only control whether local users may set the
+modes.  Modes set by servers are always accepted and are synchronized
+in BURST (as flags y, q, a and h in the nick list), in MODE and in
+CLEARMODE.  Enable them on all servers of a network at the same time, since
+older servers do not understand the additional BURST flags.  Rank order:
++y > +q > +a > +o > +h > +v; lower ranks cannot change or kick higher ranks.
+Channel creators still receive +o by default.
+
 TLS_SYSTEMCA
  * Type: boolean
  * Default: TRUE

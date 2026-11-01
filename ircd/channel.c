@@ -568,7 +568,12 @@ void add_user_to_channel(struct Channel* chptr, struct Client* who,
     assert(0 != member);
     member->user         = who;
     member->channel      = chptr;
-    member->status       = flags | (IsChannelService(who) ? CHFL_CHANOP : 0);
+    member->status       = flags;
+    if (IsChannelService(who)) {
+      member->status |= CHFL_CHANOP;
+      if (feature_bool(FEAT_CHMODE_SERVICE))
+        member->status |= CHFL_SERVICE;
+    }
     SetOpLevel(member, oplevel);
 
     member->next_member  = chptr->members;
@@ -700,6 +705,125 @@ void remove_user_from_all_channels(struct Client* cptr)
 
   while ((chan = (cli_user(cptr))->channel))
     remove_user_from_channel(cptr, chan->channel);
+}
+
+/** Description of a channel member prefix, highest rank first. */
+static const struct {
+  unsigned int chfl;
+  chmode_t     mode;
+  char         letter;
+  char         prefix;
+  int          rank;
+  enum Feature feat;
+} prefix_defs[] = {
+  { CHFL_SERVICE, MODE_CHSERV, 'y', '!', 5, FEAT_CHMODE_SERVICE },
+  { CHFL_OWNER,   MODE_OWNER,  'q', '~', 4, FEAT_CHMODE_OWNER },
+  { CHFL_ADMIN,   MODE_ADMIN,  'a', '&', 3, FEAT_CHMODE_ADMIN },
+  { CHFL_CHANOP,  MODE_CHANOP, 'o', '@', 2, FEAT_LAST_F },
+  { CHFL_HALFOP,  MODE_HALFOP, 'h', '%', 1, FEAT_CHMODE_HALFOP },
+  { CHFL_VOICE,   MODE_VOICE,  'v', '+', 0, FEAT_LAST_F }
+};
+#define PREFIX_DEFS (sizeof(prefix_defs) / sizeof(prefix_defs[0]))
+
+static int prefix_enabled(int i)
+{
+  return prefix_defs[i].feat == FEAT_LAST_F || feature_bool(prefix_defs[i].feat);
+}
+
+/** Returns the enabled member mode letters, highest rank first. */
+const char *chan_prefix_modes(void)
+{
+  static char buf[PREFIX_DEFS + 1];
+  size_t i, n = 0;
+  for (i = 0; i < PREFIX_DEFS; i++)
+    if (prefix_enabled(i))
+      buf[n++] = prefix_defs[i].letter;
+  buf[n] = '\0';
+  return buf;
+}
+
+/** Returns the enabled member prefix characters, highest rank first. */
+const char *chan_prefix_chars(void)
+{
+  static char buf[PREFIX_DEFS + 1];
+  size_t i, n = 0;
+  for (i = 0; i < PREFIX_DEFS; i++)
+    if (prefix_enabled(i))
+      buf[n++] = prefix_defs[i].prefix;
+  buf[n] = '\0';
+  return buf;
+}
+
+/** Returns the value of the ISUPPORT PREFIX token. */
+const char *chan_isupport_prefix(void)
+{
+  static char buf[2 * PREFIX_DEFS + 4];
+  ircd_snprintf(0, buf, sizeof(buf), "(%s)%s", chan_prefix_modes(),
+                chan_prefix_chars());
+  return buf;
+}
+
+/** Returns the channel mode letters for RPL_MYINFO. */
+const char *chan_info_modes(void)
+{
+  static char buf[64];
+  ircd_snprintf(0, buf, sizeof(buf), "%s%s%s%s%s",
+                feature_bool(FEAT_OPLEVELS) ? "AbeHfijklmnopstUvrDdRcCuNMZzTK"
+                                            : "beHfijklmnopstvrDdRcCuNMZzTK",
+                feature_bool(FEAT_CHMODE_ADMIN) ? "a" : "",
+                feature_bool(FEAT_CHMODE_HALFOP) ? "h" : "",
+                feature_bool(FEAT_CHMODE_OWNER) ? "q" : "",
+                feature_bool(FEAT_CHMODE_SERVICE) ? "y" : "");
+  return buf;
+}
+
+/** Returns the channel mode letters that take a parameter for RPL_MYINFO. */
+const char *chan_info_modes_params(void)
+{
+  static char buf[32];
+  ircd_snprintf(0, buf, sizeof(buf), "%s%s%s%s%s",
+                feature_bool(FEAT_OPLEVELS) ? "AbeHfjkloUv" : "beHfjklov",
+                feature_bool(FEAT_CHMODE_ADMIN) ? "a" : "",
+                feature_bool(FEAT_CHMODE_HALFOP) ? "h" : "",
+                feature_bool(FEAT_CHMODE_OWNER) ? "q" : "",
+                feature_bool(FEAT_CHMODE_SERVICE) ? "y" : "");
+  return buf;
+}
+
+/** Returns the rank of a member: 5 = +y, 4 = +q, 3 = +a, 2 = +o,
+ * 1 = +h, 0 = +v or nothing.
+ */
+int member_rank(const struct Membership *member)
+{
+  size_t i;
+  for (i = 0; i < PREFIX_DEFS; i++)
+    if ((member->status & prefix_defs[i].chfl) && prefix_defs[i].rank > 0)
+      return prefix_defs[i].rank;
+  return 0;
+}
+
+/** Writes all prefix characters of a member (highest first) to buf.
+ * The result is not NUL terminated.
+ * @returns the number of characters written.
+ */
+int chan_prefix_string(const struct Membership *member, char *buf)
+{
+  size_t i;
+  int n = 0;
+  for (i = 0; i < PREFIX_DEFS; i++)
+    if (member->status & prefix_defs[i].chfl)
+      buf[n++] = prefix_defs[i].prefix;
+  return n;
+}
+
+/** Converts a client mode (MODE_CHANOP etc.) to the membership flag. */
+unsigned int mode_to_chfl(chmode_t mode)
+{
+  size_t i;
+  for (i = 0; i < PREFIX_DEFS; i++)
+    if (mode & prefix_defs[i].mode)
+      return prefix_defs[i].chfl;
+  return 0;
 }
 
 /** Check if this user is a legitimate chanop
@@ -1061,8 +1185,8 @@ int compare_member_oplevel(const void *mp1, const void *mp2)
 void send_channel_modes(struct Client *cptr, struct Channel *chptr)
 {
   /* The order in which modes are generated is now mandatory */
-  static unsigned int current_flags[4] =
-      { 0, CHFL_VOICE, CHFL_CHANOP, CHFL_CHANOP | CHFL_VOICE };
+  unsigned int       current_flags[64];
+  int                nflags = 0;
   int                first = 1;
   int                full  = 1;
   int                flag_cnt = 0;
@@ -1078,6 +1202,7 @@ void send_channel_modes(struct Client *cptr, struct Channel *chptr)
   struct Membership** opped_members = NULL;
   int                 last_oplevel = 0;
   int                 send_oplevels = 0;
+  int                 i, j;
 
   assert(0 != cptr);
   assert(0 != chptr); 
@@ -1085,8 +1210,53 @@ void send_channel_modes(struct Client *cptr, struct Channel *chptr)
   if (IsLocalChannel(chptr->chname))
     return;
 
-  member = chptr->members;
   lp2 = chptr->banlist;
+
+  /*
+   * Find the distinct prefix combinations in use, ordered so that the
+   * combinations without ops come first, then the ones with ops.
+   * Count the ops and collect them sorted by op-level.
+   */
+  for (member = chptr->members; member; member = member->next_member)
+  {
+    unsigned int key = member->status & CHFL_PREFIX_MASK;
+    for (i = 0; i < nflags && current_flags[i] != key; i++)
+      ;
+    if (i == nflags)
+    {
+      for (i = 0; i < nflags; i++)
+      {
+        int op_i = (current_flags[i] & CHFL_CHANOP) != 0;
+        int op_k = (key & CHFL_CHANOP) != 0;
+        if (op_k < op_i || (op_k == op_i && key < current_flags[i]))
+          break;
+      }
+      for (j = nflags; j > i; j--)
+        current_flags[j] = current_flags[j - 1];
+      current_flags[i] = key;
+      nflags++;
+    }
+    if (IsChanOp(member))
+    {
+      ++number_of_ops;
+      /* We also send oplevels if anyone is below the weakest level.  */
+      if (OpLevel(member) < MAXOPLEVEL)
+        send_oplevels = 1;
+    }
+  }
+  opped_members = (struct Membership**)
+    MyMalloc((number_of_ops + 1) * sizeof(struct Membership*));
+  for (member = chptr->members; member; member = member->next_member)
+    if (IsChanOp(member))
+      opped_members[opped_members_index++] = member;
+  opped_members[number_of_ops] = NULL;	/* Needed for loop termination */
+  qsort(opped_members, number_of_ops, sizeof(struct Membership*),
+        compare_member_oplevel);
+  opped_members_index = 0;
+
+  member = (nflags && (current_flags[0] & CHFL_CHANOP))
+    ? opped_members[0] : chptr->members;
+  new_mode = (nflags && current_flags[0] != 0);
 
   *modebuf = *parabuf = '\0';
   channel_modes(cptr, modebuf, parabuf, sizeof(parabuf), chptr, 0);
@@ -1120,36 +1290,23 @@ void send_channel_modes(struct Client *cptr, struct Channel *chptr)
      * Then run 2 times over all opped members (which are ordered
      * by op-level) to also group voice and non-voice together.
      */
-    for (first = 1; flag_cnt < 4; new_mode = 1, ++flag_cnt)
+    for (first = 1; flag_cnt < nflags; new_mode = 1, ++flag_cnt)
     {
+      int op_pass = (current_flags[flag_cnt] & CHFL_CHANOP) != 0;
+
       while (member)
       {
-	if (flag_cnt < 2 && IsChanOp(member))
-	{
-	  /*
-	   * The first loop (to find all non-voice/op), we count the ops.
-	   * The second loop (to find all voiced non-ops), store the ops
-	   * in a dynamic array.
-	   */
-	  if (flag_cnt == 0)
-	    ++number_of_ops;
-	  else
-	    opped_members[opped_members_index++] = member;
-          /* We also send oplevels if anyone is below the weakest level.  */
-          if (OpLevel(member) < MAXOPLEVEL)
-            send_oplevels = 1;
-	}
 	/* Only handle the members with the flags that we are interested in. */
-        if ((member->status & CHFL_VOICED_OR_OPPED) == current_flags[flag_cnt])
+        if ((member->status & CHFL_PREFIX_MASK) == current_flags[flag_cnt])
 	{
-	  if (msgq_bufleft(mb) < NUMNICKLEN + 3 + MAXOPLEVELDIGITS)
-	    /* The 3 + MAXOPLEVELDIGITS is a possible ",:v999". */
+	  if (msgq_bufleft(mb) < NUMNICKLEN + 8 + MAXOPLEVELDIGITS)
+	    /* The 8 + MAXOPLEVELDIGITS is a possible ",:vhaqy999". */
 	  {
 	    full = 1;           /* Make sure we continue after
 				   sending it so far */
 	    /* Ensure the new BURST line contains the current
 	     * ":mode", except when there is no mode yet. */
-	    new_mode = (flag_cnt > 0) ? 1 : 0;
+	    new_mode = (current_flags[flag_cnt] != 0) ? 1 : 0;
 	    break;              /* Do not add this member to this message */
 	  }
 	  msgq_append(&me, mb, "%c%C", first ? ' ' : ',', member->user);
@@ -1158,24 +1315,25 @@ void send_channel_modes(struct Client *cptr, struct Channel *chptr)
 	  /*
 	   * Do we have a nick with a new mode ?
 	   * Or are we starting a new BURST line?
+	   * In the cases where the current mode includes ops,
+	   * we need to add the _absolute_ value of the oplevel to the mode.
 	   */
 	  if (new_mode)
 	  {
-	    /*
-	     * This means we are at the _first_ member that has only
-	     * voice, or the first member that has only ops, or the
-	     * first member that has voice and ops (so we get here
-	     * at most three times, plus once for every start of
-	     * a continued BURST line where only these modes is current.
-	     * In the two cases where the current mode includes ops,
-	     * we need to add the _absolute_ value of the oplevel to the mode.
-	     */
-	    char tbuf[3 + MAXOPLEVELDIGITS] = ":";
+	    char tbuf[8 + MAXOPLEVELDIGITS] = ":";
 	    int loc = 1;
 
-	    if (HasVoice(member))	/* flag_cnt == 1 or 3 */
+	    if (HasVoice(member))
 	      tbuf[loc++] = 'v';
-	    if (IsChanOp(member))	/* flag_cnt == 2 or 3 */
+	    if (IsHalfOp(member))
+	      tbuf[loc++] = 'h';
+	    if (IsChanAdmin(member))
+	      tbuf[loc++] = 'a';
+	    if (IsChanOwner(member))
+	      tbuf[loc++] = 'q';
+	    if (IsChanService(member))
+	      tbuf[loc++] = 'y';
+	    if (IsChanOp(member))
 	    {
               /* append the absolute value of the oplevel */
               if (send_oplevels)
@@ -1187,11 +1345,11 @@ void send_channel_modes(struct Client *cptr, struct Channel *chptr)
 	    msgq_append(&me, mb, tbuf);
 	    new_mode = 0;
 	  }
-	  else if (send_oplevels && flag_cnt > 1 && last_oplevel != member->oplevel)
+	  else if (send_oplevels && op_pass && last_oplevel != member->oplevel)
 	  {
 	    /*
 	     * This can't be the first member of a (continued) BURST
-	     * message because then either flag_cnt == 0 or new_mode == 1
+	     * message because then new_mode == 1.
 	     * Now we need to append the incremental value of the oplevel.
 	     */
             char tbuf[2 + MAXOPLEVELDIGITS];
@@ -1201,7 +1359,7 @@ void send_channel_modes(struct Client *cptr, struct Channel *chptr)
 	  }
 	}
 	/* Go to the next `member'. */
-	if (flag_cnt < 2)
+	if (!op_pass)
 	  member = member->next_member;
 	else
 	  member = opped_members[++opped_members_index];
@@ -1209,28 +1367,14 @@ void send_channel_modes(struct Client *cptr, struct Channel *chptr)
       if (full)
 	break;
 
-      /* Point `member' at the start of the list again. */
-      if (flag_cnt == 0)
+      /* Point `member' at the start of the right list again. */
+      if (flag_cnt + 1 < nflags)
       {
-	member = chptr->members;
-	/* Now, after one loop, we know the number of ops and can
-	 * allocate the dynamic array with pointer to the ops. */
-	opped_members = (struct Membership**)
-	  MyMalloc((number_of_ops + 1) * sizeof(struct Membership*));
-	opped_members[number_of_ops] = NULL;	/* Needed for loop termination */
+	if (current_flags[flag_cnt + 1] & CHFL_CHANOP)
+	  member = opped_members[(opped_members_index = 0)];
+	else
+	  member = chptr->members;
       }
-      else
-      {
-	/* At the end of the second loop, sort the opped members with
-	 * increasing op-level, so that we will output them in the
-	 * correct order (and all op-level increments stay positive) */
-	if (flag_cnt == 1)
-	  qsort(opped_members, number_of_ops,
-	        sizeof(struct Membership*), compare_member_oplevel);
-	/* The third and fourth loop run only over the opped members. */
-	member = opped_members[(opped_members_index = 0)];
-      }
-
     } /* loop over 0,+v,+o,+ov */
 
     if (!full)
@@ -1670,6 +1814,22 @@ find_delayed_joins(const struct Channel *chan)
   return 0;
 }
 
+static char
+client_mode_letter(chmode_t type)
+{
+  if (type & MODE_CHSERV)
+    return 'y';
+  if (type & MODE_OWNER)
+    return 'q';
+  if (type & MODE_ADMIN)
+    return 'a';
+  if (type & MODE_CHANOP)
+    return 'o';
+  if (type & MODE_HALFOP)
+    return 'h';
+  return 'v';
+}
+
 /** Flush out the modes
  * This is the workhorse of our ModeBuf suite; this actually generates the
  * output MODE commands, HACK notices, or whatever.  It's pretty complicated.
@@ -1855,13 +2015,13 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
       bufptr_i = &rembuf_i;
     }
 
-    if (MB_TYPE(mbuf, i) & (MODE_CHANOP | MODE_VOICE)) {
+    if (MB_TYPE(mbuf, i) & MODE_CLIENT_MASK) {
       tmp = strlen(cli_name(MB_CLIENT(mbuf, i)));
 
       if ((totalbuflen - IRCD_MAX(9, tmp)) <= 0) /* don't overflow buffer */
 	MB_TYPE(mbuf, i) |= MODE_SAVE; /* save for later */
       else {
-	bufptr[(*bufptr_i)++] = MB_TYPE(mbuf, i) & MODE_CHANOP ? 'o' : 'v';
+	bufptr[(*bufptr_i)++] = client_mode_letter(MB_TYPE(mbuf, i));
 	totalbuflen -= IRCD_MAX(9, tmp) + 1;
       }
     } else if (MB_TYPE(mbuf, i) & (MODE_BAN | MODE_EXCEPT | MODE_APASS | MODE_UPASS)) {
@@ -1978,7 +2138,7 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
       }
 
       /* deal with clients... */
-      if (MB_TYPE(mbuf, i) & (MODE_CHANOP | MODE_VOICE))
+      if (MB_TYPE(mbuf, i) & MODE_CLIENT_MASK)
 	build_string(strptr, strptr_i, cli_name(MB_CLIENT(mbuf, i)), 0, ' ');
 
       /* deal with bans... */
@@ -2099,7 +2259,7 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
                                      MB_OPLEVEL(mbuf, i));
 
       /* deal with other modes that take clients */
-      else if (MB_TYPE(mbuf, i) & (MODE_CHANOP | MODE_VOICE))
+      else if (MB_TYPE(mbuf, i) & MODE_CLIENT_MASK)
 	build_string(strptr, strptr_i, NumNick(MB_CLIENT(mbuf, i)), ' ');
 
       /* forwards only carry a parameter when the wire direction is '+';
@@ -2538,7 +2698,7 @@ struct ParseState {
   int numbans;
   struct Ban banlist[MAXPARA];
   struct {
-    unsigned int flag;
+    chmode_t flag;
     unsigned short oplevel;
     struct Client *client;
   } cli_change[MAXPARA];
@@ -3607,7 +3767,7 @@ mode_parse_client(struct ParseState *state, chmode_t *flag_p)
     if (colon != NULL) {
       *colon++ = '\0';
       req_oplevel = atoi(colon);
-      if (*flag_p == CHFL_VOICE || state->dir == MODE_DEL) {
+      if (*flag_p != MODE_CHANOP || state->dir == MODE_DEL) {
         /* Ignore the colon and its argument. */
       } else if (!(state->flags & MODE_PARSE_FORCE)
           && state->member
@@ -3665,6 +3825,7 @@ static void
 mode_process_clients(struct ParseState *state)
 {
   int i;
+  unsigned int chfl;
   struct Membership *member;
 
   for (i = 0; state->cli_change[i].flag; i++) {
@@ -3681,11 +3842,39 @@ mode_process_clients(struct ParseState *state)
       continue;
     }
 
-    if ((state->cli_change[i].flag & MODE_ADD &&
-	 (state->cli_change[i].flag & member->status)) ||
-	(state->cli_change[i].flag & MODE_DEL &&
-	 !(state->cli_change[i].flag & member->status)))
+    chfl = mode_to_chfl(state->cli_change[i].flag);
+
+    if ((state->cli_change[i].flag & MODE_ADD && (chfl & member->status)) ||
+	(state->cli_change[i].flag & MODE_DEL && !(chfl & member->status)))
       continue; /* no change made, don't do anything */
+
+    /* Rank checks for local users: the prefix modes form a hierarchy. */
+    if (MyUser(state->sptr) && !(state->flags & MODE_PARSE_FORCE)) {
+      int srank = state->member ? member_rank(state->member) : -1;
+      int trank = member_rank(member);
+      int mrank = 0;
+
+      if (chfl & CHFL_SERVICE)
+	mrank = 5;
+      else if (chfl & CHFL_OWNER)
+	mrank = 4;
+      else if (chfl & CHFL_ADMIN)
+	mrank = 3;
+      else if (chfl & CHFL_CHANOP)
+	mrank = 2;
+      else if (chfl & CHFL_HALFOP)
+	mrank = 1;
+
+      /* Anyone may remove their own status. */
+      if (!(state->sptr == state->cli_change[i].client
+	    && state->cli_change[i].flag & MODE_DEL)
+	  && (srank < IRCD_MAX(mrank, 1)
+	      || (state->sptr != state->cli_change[i].client
+		  && trank > srank))) {
+	send_reply(state->sptr, ERR_CHANOPRIVSNEEDED, state->chptr->chname);
+	continue;
+      }
+    }
 
     /* see if the deop is allowed */
     if ((state->cli_change[i].flag & (MODE_DEL | MODE_CHANOP)) ==
@@ -3762,13 +3951,32 @@ mode_process_clients(struct ParseState *state)
         if (IsDelayedJoin(member) && !IsZombie(member))
           RevealDelayedJoin(member);
         ClearDelayedTarget(member);
-	member->status |= (state->cli_change[i].flag &
-			   (MODE_CHANOP | MODE_VOICE));
+	member->status |= chfl;
 	if (state->cli_change[i].flag & MODE_CHANOP)
 	  ClearDeopped(member);
-      } else
-	member->status &= ~(state->cli_change[i].flag &
-			    (MODE_CHANOP | MODE_VOICE));
+	/* +y, +q and +a imply +o */
+	if ((chfl & CHFL_EXT_OP_MASK) && !IsChanOp(member)) {
+	  member->status |= CHFL_CHANOP;
+	  ClearDeopped(member);
+	  SetOpLevel(member, MAXOPLEVEL);
+	  modebuf_mode_client(state->mbuf, MODE_ADD | MODE_CHANOP,
+			      state->cli_change[i].client, MAXOPLEVEL);
+	}
+      } else {
+	member->status &= ~chfl;
+	/* removing +o also removes the modes that imply it */
+	if (chfl & CHFL_CHANOP) {
+	  static const chmode_t implied[] = { MODE_CHSERV, MODE_OWNER, MODE_ADMIN };
+	  int k;
+	  for (k = 0; k < 3; k++)
+	    if (member->status & mode_to_chfl(implied[k])) {
+	      member->status &= ~mode_to_chfl(implied[k]);
+	      modebuf_mode_client(state->mbuf, MODE_DEL | implied[k],
+				  state->cli_change[i].client,
+				  state->cli_change[i].oplevel);
+	    }
+	}
+      }
     }
 
     /* accumulate the change */
@@ -3841,6 +4049,10 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
   static chmode_t chan_flags[] = {
     MODE_CHANOP,	'o',
     MODE_VOICE,		'v',
+    MODE_HALFOP,	'h',
+    MODE_ADMIN,		'a',
+    MODE_OWNER,		'q',
+    MODE_CHSERV,	'y',
     MODE_PRIVATE,	'p',
     MODE_SECRET,	's',
     MODE_MODERATED,	'm',
@@ -3875,6 +4087,8 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
   chmode_t *flag_p;
   chmode_t t_mode;
   char *modestr;
+  int halfop_limited;
+  unsigned int saved_flags;
   struct ParseState state;
 
   assert(0 != cptr);
@@ -3908,6 +4122,10 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
     state.cli_change[i].client = 0;
   }
 
+  /* Half-ops (without full op) may only change +v. */
+  halfop_limited = member && !IsChanOp(member) && IsHalfOp(member)
+      && !(flags & MODE_PARSE_FORCE);
+
   modestr = state.parv[state.args_used++];
   state.parc--;
 
@@ -3922,6 +4140,21 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
 	  send_reply(state.sptr, ERR_UNKNOWNMODE, *modestr);
 	continue;
       }
+
+      /* Optional member modes are disabled unless configured. */
+      if (MyUser(state.sptr) && !(state.flags & MODE_PARSE_FORCE)
+          && ((*modestr == 'y' && !feature_bool(FEAT_CHMODE_SERVICE))
+              || (*modestr == 'q' && !feature_bool(FEAT_CHMODE_OWNER))
+              || (*modestr == 'a' && !feature_bool(FEAT_CHMODE_ADMIN))
+              || (*modestr == 'h' && !feature_bool(FEAT_CHMODE_HALFOP)))) {
+        send_reply(state.sptr, ERR_UNKNOWNMODE, *modestr);
+        continue;
+      }
+
+      saved_flags = state.flags;
+      if (halfop_limited && *modestr != '+' && *modestr != '-'
+          && *modestr != 'v')
+        state.flags |= MODE_PARSE_NOTOPER;
 
       switch (*modestr) {
       case '+': /* switch direction to MODE_ADD */
@@ -3964,8 +4197,12 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
 	mode_parse_ban(&state, flag_p);
 	break;
 
-      case 'o': /* deal with ops/voice */
+      case 'o': /* deal with ops/voice and the optional prefix modes */
       case 'v':
+      case 'h':
+      case 'a':
+      case 'q':
+      case 'y':
 	mode_parse_client(&state, flag_p);
 	break;
 
@@ -3973,6 +4210,7 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
 	mode_parse_mode(&state, flag_p);
 	break;
       } /* switch (*modestr) */
+      state.flags = saved_flags;
     } /* for (; *modestr; modestr++) */
 
     if (state.flags & MODE_PARSE_BURST)
@@ -4260,11 +4498,17 @@ joinbuf_join(struct JoinBuf *jbuf, struct Channel *chan, unsigned int flags)
       /* send an op, too, if needed */
       if (flags & CHFL_CHANOP
           && (oplevel < MAXOPLEVEL || !MyUser(jbuf->jb_source)
-              || IsChannelService(jbuf->jb_source)))
-	sendcmdto_channel_butserv_butone((IsChannelService(jbuf->jb_source) || chan->mode.apass[0]) ?
-                                         &his : jbuf->jb_source,
-                                         CMD_MODE, chan, NULL, 0, "%H +o %C",
-					 chan, jbuf->jb_source);
+              || IsChannelService(jbuf->jb_source))) {
+        struct Client *mode_src = (IsChannelService(jbuf->jb_source) || chan->mode.apass[0]) ?
+                                  &his : jbuf->jb_source;
+        if (IsChannelService(jbuf->jb_source) && feature_bool(FEAT_CHMODE_SERVICE))
+          sendcmdto_channel_butserv_butone(mode_src, CMD_MODE, chan, NULL, 0,
+                                           "%H +oy %C %C", chan,
+                                           jbuf->jb_source, jbuf->jb_source);
+        else
+          sendcmdto_channel_butserv_butone(mode_src, CMD_MODE, chan, NULL, 0,
+                                           "%H +o %C", chan, jbuf->jb_source);
+      }
     } else if (MyUser(jbuf->jb_source))
       sendjointo_one(jbuf->jb_source, chan, jbuf->jb_source);
   }

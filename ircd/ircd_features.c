@@ -360,6 +360,10 @@ static struct FeatureDesc {
   F_B(USER_HIDEIDLETIME, 0, 0, 0),
   F_B(AUTOCHANMODES, 0, 1, 0),
   F_S(AUTOCHANMODES_LIST, FEAT_CASE | FEAT_NULL, "ntCN", 0),
+  F_B(CHMODE_SERVICE, 0, 0, 0),
+  F_B(CHMODE_OWNER, 0, 0, 0),
+  F_B(CHMODE_ADMIN, 0, 0, 0),
+  F_B(CHMODE_HALFOP, 0, 0, 0),
 
   /* features that probably should not be touched */
   F_I(KILLCHASETIMELIMIT, 0, 30, 0),

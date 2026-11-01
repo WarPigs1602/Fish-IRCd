@@ -84,6 +84,17 @@ struct HistEntry;
 #define CHFL_DELAYED            0x40000 /**< User's join message is delayed */
 #define CHFL_DELAYED_TARGET     0x80000 /**< User has not used a target on this channel */
 
+#define CHFL_HALFOP             0x100000 /**< +h Half-op (optional) */
+#define CHFL_ADMIN              0x200000 /**< +a Channel admin (optional) */
+#define CHFL_OWNER              0x400000 /**< +q Channel owner (optional) */
+#define CHFL_SERVICE            0x800000 /**< +y Channel service (optional) */
+
+/** Optional prefix flags beyond +o and +v */
+#define CHFL_EXT_MASK        (CHFL_HALFOP | CHFL_ADMIN | CHFL_OWNER | CHFL_SERVICE)
+/** Prefix flags that imply +o */
+#define CHFL_EXT_OP_MASK     (CHFL_ADMIN | CHFL_OWNER | CHFL_SERVICE)
+#define CHFL_PREFIX_MASK     (CHFL_CHANOP | CHFL_VOICE | CHFL_EXT_MASK)
+
 #define CHFL_OVERLAP         (CHFL_CHANOP | CHFL_VOICE)
 #define CHFL_BANVALIDMASK    (CHFL_BANVALID | CHFL_BANNED)
 #define CHFL_VOICED_OR_OPPED (CHFL_CHANOP | CHFL_VOICE)
@@ -92,6 +103,12 @@ struct HistEntry;
 
 #define MODE_CHANOP        CHFL_CHANOP          /**< +o Chanop */
 #define MODE_VOICE         CHFL_VOICE           /**< +v Voice */
+#define MODE_HALFOP        0x800000000ULL       /**< +h Half-op (client mode) */
+#define MODE_ADMIN         0x1000000000ULL      /**< +a Admin (client mode) */
+#define MODE_OWNER         0x2000000000ULL      /**< +q Owner (client mode) */
+#define MODE_CHSERV        0x4000000000ULL      /**< +y Channel service (client mode) */
+/** all modes that apply to a channel member */
+#define MODE_CLIENT_MASK   (MODE_CHANOP | MODE_VOICE | MODE_HALFOP | MODE_ADMIN | MODE_OWNER | MODE_CHSERV)
 #define MODE_PRIVATE       0x00000004           /**< +p Private */
 #define MODE_SECRET        0x00000008           /**< +s Secret */
 #define MODE_MODERATED     0x00000010           /**< +m Moderated */
@@ -126,12 +143,12 @@ struct HistEntry;
 
 /** mode flags which take another parameter (With PARAmeterS)
  */
-#define MODE_WPARAS     (MODE_CHANOP|MODE_VOICE|MODE_BAN|MODE_EXCEPT|MODE_KEY|MODE_LIMIT|MODE_APASS|MODE_UPASS|MODE_JOINFLOOD|MODE_HISTORY|MODE_FORWARD)
+#define MODE_WPARAS     (MODE_CLIENT_MASK|MODE_BAN|MODE_EXCEPT|MODE_KEY|MODE_LIMIT|MODE_APASS|MODE_UPASS|MODE_JOINFLOOD|MODE_HISTORY|MODE_FORWARD)
 
 /** Available Channel modes */
-#define infochanmodes feature_bool(FEAT_OPLEVELS) ? "AbeHfijklmnopstUvrDdRcCuNMZzTK" : "beHfijklmnopstvrDdRcCuNMZzTK"
+#define infochanmodes chan_info_modes()
 /** Available Channel modes that take parameters */
-#define infochanmodeswithparams feature_bool(FEAT_OPLEVELS) ? "AbeHfjkloUv" : "beHfjklov"
+#define infochanmodeswithparams chan_info_modes_params()
 
 #define HoldChannel(x)          (!(x))
 /** name invisible */
@@ -221,7 +238,11 @@ struct Membership {
 #define HasVoice(x)         ((x)->status & CHFL_VOICE)
 #define IsServOpOk(x)       ((x)->status & CHFL_SERVOPOK)
 #define IsBurstJoined(x)    ((x)->status & CHFL_BURST_JOINED)
-#define IsVoicedOrOpped(x)  ((x)->status & CHFL_VOICED_OR_OPPED)
+#define IsVoicedOrOpped(x)  ((x)->status & CHFL_PREFIX_MASK)
+#define IsHalfOp(x)         ((x)->status & CHFL_HALFOP)
+#define IsChanAdmin(x)      ((x)->status & CHFL_ADMIN)
+#define IsChanOwner(x)      ((x)->status & CHFL_OWNER)
+#define IsChanService(x)    ((x)->status & CHFL_SERVICE)
 #define IsChannelManager(x) ((x)->status & CHFL_CHANNEL_MANAGER)
 #define IsUserParting(x)    ((x)->status & CHFL_USER_PARTING)
 #define IsDelayedJoin(x)    ((x)->status & CHFL_DELAYED)
@@ -444,6 +465,15 @@ extern void channel_joinflood_note(struct Channel *chptr);
 extern void modebuf_init(struct ModeBuf *mbuf, struct Client *source,
 			 struct Client *connect, struct Channel *chan,
 			 unsigned int dest);
+extern const char *chan_info_modes(void);
+extern const char *chan_info_modes_params(void);
+extern const char *chan_prefix_modes(void);
+extern const char *chan_prefix_chars(void);
+extern const char *chan_isupport_prefix(void);
+extern int member_rank(const struct Membership *member);
+extern int chan_prefix_string(const struct Membership *member, char *buf);
+extern unsigned int mode_to_chfl(chmode_t mode);
+
 extern void modebuf_mode(struct ModeBuf *mbuf, chmode_t mode);
 extern void modebuf_mode_uint(struct ModeBuf *mbuf, chmode_t mode,
 			      unsigned int uint);
