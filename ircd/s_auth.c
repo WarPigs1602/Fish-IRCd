@@ -546,6 +546,11 @@ static int check_auth_finished(struct AuthRequest *auth, int bitclr)
       s[USERLEN] = '\0';
     } /* else cleaned version of client-provided name is in place */
 
+    /* G-line matching uses realusername/realhost, which are otherwise only
+     * filled in after this check. */
+    ircd_strncpy(user->realusername, user->username, USERLEN);
+    ircd_strncpy(user->realhost, cli_sockhost(sptr), HOSTLEN);
+
     /* Check for K- or G-line. */
     FlagSet(&auth->flags, AR_GLINE_CHECKED);
     killreason = find_kill(sptr);

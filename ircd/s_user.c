@@ -36,6 +36,7 @@
 #include "ircd.h"
 #include "ircd_alloc.h"
 #include "ircd_chattr.h"
+#include "gline.h"
 #include "ircd_features.h"
 #include "ircd_log.h"
 #include "ircd_reply.h"
@@ -362,6 +363,14 @@ int register_user(struct Client *cptr, struct Client *sptr)
   {
     assert(cptr == sptr);
 
+    /* IAuth or WEBIRC may have changed username/host after the early
+     * check in check_auth_finished(), so check K-/G-lines against the
+     * final identity as well. */
+    if (find_kill(sptr)) {
+      ++ServerStats->is_k_lined;
+      return exit_client(sptr, sptr, &me, "G-lined");
+    }
+
     Count_unknownbecomesclient(sptr, UserStats);
 
     if (feature_bool(FEAT_AUTOINVISIBLE))
@@ -686,6 +695,19 @@ int set_nick_name(struct Client* cptr, struct Client* sptr,
       hRemClient(sptr);
     strcpy(cli_name(sptr), nick);
     hAddClient(sptr);
+
+    /* G-lines may carry a nick mask, so recheck after the nick changed. */
+    if (MyUser(sptr) && !feature_bool(FEAT_DISABLE_GLINES)) {
+      struct Gline *agline = gline_lookup(sptr, 0);
+      if (agline) {
+        send_reply(sptr, SND_EXPLICIT | ERR_YOUREBANNEDCREEP, ":%s",
+                   GlineReason(agline));
+        sendto_opmask_butone(0, SNO_GLINE, "G-line active for %s",
+                             get_client_name(sptr, SHOW_IP));
+        return exit_client_msg(cptr, sptr, &me, "G-lined (%s)",
+                               GlineReason(agline));
+      }
+    }
   }
   else {
     /* Local client setting NICK the first time */

@@ -364,7 +364,7 @@ do_gline(struct Client *cptr, struct Client *sptr, struct Gline *gline)
             continue;
         }
         else {
-          if (match(gline->gl_host, cli_sockhost(acptr)) != 0)
+          if (match(gline->gl_host, cli_user(acptr)->realhost) != 0)
             continue;
         }
       }
