@@ -126,6 +126,7 @@ do_clearmode(struct Client *cptr, struct Client *sptr, struct Channel *chptr,
     MODE_LIMIT,		'l',
     MODE_JOINFLOOD,	'j',
     MODE_HISTORY,	'H',
+    MODE_FORWARD,	'f',
     MODE_REGONLY,	'r',
     MODE_DELJOINS,      'D',
     MODE_NOCOLOR,       'c',
@@ -176,6 +177,13 @@ do_clearmode(struct Client *cptr, struct Client *sptr, struct Channel *chptr,
    */
   if (del_mode & MODE_KEY && *chptr->mode.key)
     modebuf_mode_string(&mbuf, MODE_DEL | MODE_KEY, chptr->mode.key, 0);
+
+  /* If we're removing the forward, drop the stored channel name */
+  if (del_mode & MODE_FORWARD) {
+    if (*chptr->mode.forward)
+      modebuf_mode_string(&mbuf, MODE_DEL | MODE_FORWARD, 0, 0);
+    chptr->mode.forward[0] = '\0';
+  }
 
   /* If we're removing the history setting, drop the stored history */
   if (del_mode & MODE_HISTORY) {

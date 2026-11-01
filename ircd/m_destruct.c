@@ -170,6 +170,8 @@ int ms_destruct(struct Client* cptr, struct Client* sptr, int parc, char* parv[]
 
     /* Send other MODEs. */
     modebuf_mode(&mbuf, MODE_DEL | chptr->mode.mode);
+    if (*chptr->mode.forward)
+      modebuf_mode_string(&mbuf, MODE_DEL | MODE_FORWARD, 0, 0);
     if (*chptr->mode.key)
       modebuf_mode_string(&mbuf, MODE_DEL | MODE_KEY, chptr->mode.key, 0);
     if (chptr->mode.limit)

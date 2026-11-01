@@ -122,15 +122,16 @@ struct HistEntry;
 #define MODE_HISTORY       0x80000000ULL        /**< +H Channel history lines:hours */
 #define MODE_NOKNOCK       0x100000000ULL       /**< +K No KNOCK */
 #define MODE_EXCEPT        0x200000000ULL       /**< +e Ban exception */
+#define MODE_FORWARD       0x400000000ULL       /**< +f Forward to another channel */
 
 /** mode flags which take another parameter (With PARAmeterS)
  */
-#define MODE_WPARAS     (MODE_CHANOP|MODE_VOICE|MODE_BAN|MODE_EXCEPT|MODE_KEY|MODE_LIMIT|MODE_APASS|MODE_UPASS|MODE_JOINFLOOD|MODE_HISTORY)
+#define MODE_WPARAS     (MODE_CHANOP|MODE_VOICE|MODE_BAN|MODE_EXCEPT|MODE_KEY|MODE_LIMIT|MODE_APASS|MODE_UPASS|MODE_JOINFLOOD|MODE_HISTORY|MODE_FORWARD)
 
 /** Available Channel modes */
-#define infochanmodes feature_bool(FEAT_OPLEVELS) ? "AbeHijklmnopstUvrDdRcCuNMZzTK" : "beHijklmnopstvrDdRcCuNMZzTK"
+#define infochanmodes feature_bool(FEAT_OPLEVELS) ? "AbeHfijklmnopstUvrDdRcCuNMZzTK" : "beHfijklmnopstvrDdRcCuNMZzTK"
 /** Available Channel modes that take parameters */
-#define infochanmodeswithparams feature_bool(FEAT_OPLEVELS) ? "AbeHjkloUv" : "beHjklov"
+#define infochanmodeswithparams feature_bool(FEAT_OPLEVELS) ? "AbeHfjkloUv" : "beHfjklov"
 
 #define HoldChannel(x)          (!(x))
 /** name invisible */
@@ -256,6 +257,7 @@ struct Mode {
   unsigned int jf_secs;    /**< +j: length of the window in seconds */
   unsigned int hist_lines; /**< +H: number of lines kept */
   unsigned int hist_hours; /**< +H: maximum age in hours */
+  char forward[CHANNELLEN + 1]; /**< +f: channel to forward failed joins to */
   char key[KEYLEN + 1];
   char upass[KEYLEN + 1];
   char apass[KEYLEN + 1];

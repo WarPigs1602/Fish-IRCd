@@ -972,7 +972,7 @@ static Numeric replyTable[] = {
 /* 469 */
   { ERR_TLSONLYCHAN, "%s :Cannot join channel (+Z)", "469" },
 /* 470 */
-  { 0 },
+  { ERR_LINKCHANNEL, "%s %s :Forwarding to another channel", "470" },
 /* 471 */
   { ERR_CHANNELISFULL, "%s :Cannot join channel (+l)", "471" },
 /* 472 */

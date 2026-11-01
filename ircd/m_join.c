@@ -113,6 +113,68 @@ static int check_target_join(struct Client *cptr, struct Channel *chptr)
   return 0;
 }
 
+/** Maximum number of +f hops followed for a single join. */
+#define MAX_FORWARD_HOPS 3
+
+/** Check whether a client may join a channel, ignoring apass/upass.
+ * @param[in] sptr Client trying to join.
+ * @param[in] chptr Channel being joined.
+ * @param[in] key Key supplied by the client (may be NULL).
+ * @return Zero if the join is allowed, otherwise the numeric of the error.
+ */
+static int join_error(struct Client *sptr, struct Channel *chptr, char *key)
+{
+  if (IsXtraOp(sptr) || IsInvited(sptr, chptr))
+    return 0;
+  if (chptr->mode.mode & MODE_INVITEONLY)
+    return ERR_INVITEONLYCHAN;
+  if (chptr->mode.limit && chptr->users >= chptr->mode.limit)
+    return ERR_CHANNELISFULL;
+  if ((chptr->mode.mode & MODE_REGONLY) && !IsAccount(sptr))
+    return ERR_NEEDREGGEDNICK;
+  if (find_ban(sptr, chptr->banlist))
+    return ERR_BANNEDFROMCHAN;
+  if (*chptr->mode.key && (!key || strcmp(key, chptr->mode.key)))
+    return ERR_BADCHANNELKEY;
+  if ((chptr->mode.mode & MODE_TLSONLY) && !IsTLS(sptr))
+    return ERR_TLSONLYCHAN;
+  return 0;
+}
+
+/** Follow the +f chain of a channel the client could not join.
+ * Loops are broken by remembering every channel visited and by limiting
+ * the chain to MAX_FORWARD_HOPS hops.
+ * @param[in] sptr Client trying to join.
+ * @param[in] chptr Channel the client was refused by.
+ * @param[in] key Key supplied by the client (may be NULL).
+ * @return The first joinable channel on the chain, or NULL.
+ */
+static struct Channel *find_forward_target(struct Client *sptr,
+                                           struct Channel *chptr, char *key)
+{
+  struct Channel *visited[MAX_FORWARD_HOPS + 1];
+  struct Channel *cur = chptr;
+  int hops, i;
+
+  visited[0] = chptr;
+  for (hops = 1; hops <= MAX_FORWARD_HOPS; hops++) {
+    struct Channel *next;
+
+    if (!(cur->mode.mode & MODE_FORWARD) || !cur->mode.forward[0])
+      return NULL;
+    if (!(next = FindChannel(cur->mode.forward)))
+      return NULL;
+    for (i = 0; i < hops; i++)
+      if (visited[i] == next)
+        return NULL; /* loop */
+    if (find_member_link(next, sptr) || !join_error(sptr, next, key))
+      return next;
+    visited[hops] = next;
+    cur = next;
+  }
+  return NULL;
+}
+
 /** Handle a JOIN message from a client connection.
  * See @ref m_functions for discussion of the arguments.
  * @param[in] cptr Client that sent us the message.
@@ -271,6 +333,23 @@ int m_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
           sendto_opmask_butone(0, SNO_HACK4, "OPER JOIN: %C JOIN %H "
                                "(overriding +%c)", sptr, chptr, err);
         err = 0;
+      }
+
+      /* Forward to another channel if +f is set and the join was refused
+       * for a reason other than a wrong key. */
+      if (err && err != ERR_BADCHANNELKEY && (chptr->mode.mode & MODE_FORWARD)) {
+        struct Channel *target = find_forward_target(sptr, chptr, key);
+
+        if (target) {
+          send_reply(sptr, ERR_LINKCHANNEL, chptr->chname, target->chname);
+          chptr = target;
+          if (find_member_link(chptr, sptr))
+            continue; /* already on the target channel */
+          if ((delay_flag = check_target_join(sptr, chptr)) == 1)
+            continue;
+          flags = CHFL_DEOPPED;
+          err = 0;
+        }
       }
 
       /* Is there some reason the user may not join? */
@@ -438,6 +517,11 @@ int ms_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
         if (chptr->mode.limit) {
           modebuf_mode_uint(&mbuf, MODE_DEL | MODE_LIMIT, chptr->mode.limit);
           chptr->mode.limit = 0;
+        }
+
+        if (chptr->mode.forward[0]) {
+          modebuf_mode_string(&mbuf, MODE_DEL | MODE_FORWARD, 0, 0);
+          chptr->mode.forward[0] = '\0';
         }
 
         if (chptr->mode.key[0]) {

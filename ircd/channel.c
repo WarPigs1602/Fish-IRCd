@@ -981,6 +981,14 @@ void channel_modes(struct Client *cptr, char *mbuf, char *pbuf, int buflen,
     previous_parameter = 1;
   }
 
+  if (chptr->mode.mode & MODE_FORWARD) {
+    *mbuf++ = 'f';
+    if (previous_parameter)
+      strcat(pbuf, " ");
+    strcat(pbuf, chptr->mode.forward);
+    previous_parameter = 1;
+  }
+
   if (chptr->mode.mode & MODE_HISTORY) {
     char hbuf[24];
 
@@ -1701,6 +1709,7 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
     MODE_LIMIT,		'l',
     MODE_JOINFLOOD,	'j',
     MODE_HISTORY,	'H',
+    MODE_FORWARD,	'f',
 /*  MODE_APASS,		'A', */
 /*  MODE_UPASS,		'U', */
     0x0, 0x0
@@ -1902,6 +1911,15 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
 	bufptr[(*bufptr_i)++] = 'l';
 	totalbuflen -= tmp + 1;
       }
+    } else if (MB_TYPE(mbuf, i) & MODE_FORWARD) {
+      tmp = MB_STRING(mbuf, i) ? strlen(MB_STRING(mbuf, i)) : 0;
+
+      if ((totalbuflen - tmp) <= 0) /* don't overflow buffer */
+	MB_TYPE(mbuf, i) |= MODE_SAVE; /* save for later */
+      else {
+	bufptr[(*bufptr_i)++] = 'f';
+	totalbuflen -= tmp + 1;
+      }
     } else if (MB_TYPE(mbuf, i) & MODE_JOINFLOOD) {
       ircd_snprintf(0, jfbuf, sizeof(jfbuf), "%u:%u", MB_UINT(mbuf, i) >> 16,
 		    MB_UINT(mbuf, i) & 0xffff);
@@ -1971,6 +1989,11 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
       else if (MB_TYPE(mbuf, i) & MODE_KEY)
 	build_string(strptr, strptr_i, mbuf->mb_dest & MODEBUF_DEST_NOKEY ?
 		     "*" : MB_STRING(mbuf, i), 0, ' ');
+
+      /* deal with forwards; removal has no parameter */
+      else if ((MB_TYPE(mbuf, i) & (MODE_ADD | MODE_FORWARD)) ==
+	       (MODE_ADD | MODE_FORWARD))
+	build_string(strptr, strptr_i, MB_STRING(mbuf, i), 0, ' ');
 
       /* deal with invisible passwords */
       else if (MB_TYPE(mbuf, i) & (MODE_APASS | MODE_UPASS))
@@ -2078,6 +2101,14 @@ modebuf_flush_int(struct ModeBuf *mbuf, int all)
       /* deal with other modes that take clients */
       else if (MB_TYPE(mbuf, i) & (MODE_CHANOP | MODE_VOICE))
 	build_string(strptr, strptr_i, NumNick(MB_CLIENT(mbuf, i)), ' ');
+
+      /* forwards only carry a parameter when the wire direction is '+';
+       * when bouncing, the direction is reversed */
+      else if (MB_TYPE(mbuf, i) & MODE_FORWARD) {
+	if (((MB_TYPE(mbuf, i) & MODE_ADD) != 0) ==
+	    ((mbuf->mb_dest & MODEBUF_DEST_BOUNCE) == 0))
+	  build_string(strptr, strptr_i, MB_STRING(mbuf, i), 0, ' ');
+      }
 
       /* deal with modes that take strings */
       else if (MB_TYPE(mbuf, i) & (MODE_KEY | MODE_BAN | MODE_EXCEPT | MODE_APASS | MODE_UPASS))
@@ -2255,8 +2286,10 @@ modebuf_mode_uint(struct ModeBuf *mbuf, chmode_t mode, unsigned int uint)
   assert(0 != mbuf);
   assert(0 != (mode & (MODE_ADD | MODE_DEL)));
 
-  if (mode == (MODE_LIMIT | MODE_DEL) || mode == (MODE_JOINFLOOD | MODE_DEL) ||
-      mode == (MODE_HISTORY | MODE_DEL)) {
+  /* a bounced -l/-j/-H must keep its slot so the old value can be sent back */
+  if ((mode == (MODE_LIMIT | MODE_DEL) || mode == (MODE_JOINFLOOD | MODE_DEL) ||
+       mode == (MODE_HISTORY | MODE_DEL)) &&
+      !(mbuf->mb_dest & MODEBUF_DEST_BOUNCE)) {
       mbuf->mb_rem |= mode;
       return;
   }
@@ -2359,6 +2392,7 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
     MODE_LIMIT,		'l',
     MODE_JOINFLOOD,	'j',
     MODE_HISTORY,	'H',
+    MODE_FORWARD,	'f',
     MODE_REGONLY,	'r',
     MODE_DELJOINS,      'D',
     MODE_NOCOLOR,       'c',
@@ -2374,7 +2408,7 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
   chmode_t add;
   int i, bufpos = 0, len;
   chmode_t *flag_p;
-  char *key = 0, limitbuf[20], jfbuf[24], hbuf[24];
+  char *key = 0, *fwd = 0, limitbuf[20], jfbuf[24], hbuf[24];
   char *apass = 0, *upass = 0;
 
   assert(0 != mbuf);
@@ -2385,14 +2419,16 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
   jfbuf[0] = '\0';
   hbuf[0] = '\0';
 
-  add = mbuf->mb_add & ~(MODE_KEY | MODE_LIMIT | MODE_JOINFLOOD | MODE_HISTORY | MODE_APASS | MODE_UPASS);
+  add = mbuf->mb_add & ~(MODE_KEY | MODE_LIMIT | MODE_JOINFLOOD | MODE_HISTORY | MODE_FORWARD | MODE_APASS | MODE_UPASS);
 
   for (i = 0; i < mbuf->mb_count; i++) { /* find keys and limits */
     if (MB_TYPE(mbuf, i) & MODE_ADD) {
-      add |= MB_TYPE(mbuf, i) & (MODE_KEY | MODE_LIMIT | MODE_JOINFLOOD | MODE_HISTORY | MODE_APASS | MODE_UPASS);
+      add |= MB_TYPE(mbuf, i) & (MODE_KEY | MODE_LIMIT | MODE_JOINFLOOD | MODE_HISTORY | MODE_FORWARD | MODE_APASS | MODE_UPASS);
 
       if (MB_TYPE(mbuf, i) & MODE_KEY) /* keep strings */
 	key = MB_STRING(mbuf, i);
+      else if (MB_TYPE(mbuf, i) & MODE_FORWARD)
+	fwd = MB_STRING(mbuf, i);
       else if (MB_TYPE(mbuf, i) & MODE_LIMIT)
 	ircd_snprintf(0, limitbuf, sizeof(limitbuf), "%u", MB_UINT(mbuf, i));
       else if (MB_TYPE(mbuf, i) & MODE_JOINFLOOD)
@@ -2426,6 +2462,8 @@ modebuf_extract(struct ModeBuf *mbuf, char *buf)
       build_string(buf, &bufpos, jfbuf, 0, ' ');
     else if (buf[i] == 'H')
       build_string(buf, &bufpos, hbuf, 0, ' ');
+    else if (buf[i] == 'f')
+      build_string(buf, &bufpos, fwd, 0, ' ');
     else if (buf[i] == 'U')
       build_string(buf, &bufpos, upass, 0, ' ');
     else if (buf[i] == 'A')
@@ -2480,6 +2518,7 @@ mode_invite_clear(struct Channel *chan)
 #define DONE_APASS_DEL  0x200   /**< We've removed the admin pass */
 #define DONE_JOINFLOOD  0x400   /**< We've set or removed the join flood limit */
 #define DONE_HISTORY    0x800   /**< We've set or removed the history setting */
+#define DONE_FORWARD    0x1000  /**< We've set or removed the forward channel */
 
 struct ParseState {
   struct ModeBuf *mbuf;
@@ -2580,7 +2619,13 @@ mode_parse_limit(struct ParseState *state, chmode_t *flag_p)
   if (!state->mbuf)
     return;
 
-  modebuf_mode_uint(state->mbuf, state->dir | flag_p[0], t_limit);
+  /* When bouncing a +l over an existing limit, send the old one back */
+  if ((state->flags & MODE_PARSE_BOUNCE) && state->dir == MODE_ADD &&
+      state->chptr->mode.limit)
+    modebuf_mode_uint(state->mbuf, MODE_DEL | flag_p[0],
+		      state->chptr->mode.limit);
+  else
+    modebuf_mode_uint(state->mbuf, state->dir | flag_p[0], t_limit);
 
   if (state->flags & MODE_PARSE_SET) { /* set the limit */
     if (state->dir & MODE_ADD) {
@@ -2666,7 +2711,15 @@ mode_parse_joinflood(struct ParseState *state, chmode_t *flag_p)
   if (!state->mbuf)
     return;
 
-  modebuf_mode_uint(state->mbuf, state->dir | flag_p[0], packed);
+  /* When bouncing a +j over an existing setting, send the old one back
+   * (the flush reverses the direction, so DEL becomes "+j old") */
+  if ((state->flags & MODE_PARSE_BOUNCE) && state->dir == MODE_ADD &&
+      (state->chptr->mode.mode & MODE_JOINFLOOD))
+    modebuf_mode_uint(state->mbuf, MODE_DEL | flag_p[0],
+		      (state->chptr->mode.jf_joins << 16) |
+		      state->chptr->mode.jf_secs);
+  else
+    modebuf_mode_uint(state->mbuf, state->dir | flag_p[0], packed);
 
   if (state->flags & MODE_PARSE_SET) {
     if (state->dir & MODE_ADD) {
@@ -2751,7 +2804,14 @@ mode_parse_history(struct ParseState *state, chmode_t *flag_p)
   if (!state->mbuf)
     return;
 
-  modebuf_mode_uint(state->mbuf, state->dir | flag_p[0], packed);
+  /* When bouncing a +H over an existing setting, send the old one back */
+  if ((state->flags & MODE_PARSE_BOUNCE) && state->dir == MODE_ADD &&
+      (state->chptr->mode.mode & MODE_HISTORY))
+    modebuf_mode_uint(state->mbuf, MODE_DEL | flag_p[0],
+		      (state->chptr->mode.hist_lines << 16) |
+		      state->chptr->mode.hist_hours);
+  else
+    modebuf_mode_uint(state->mbuf, state->dir | flag_p[0], packed);
 
   if (state->flags & MODE_PARSE_SET) {
     if (state->dir & MODE_ADD) {
@@ -2764,6 +2824,90 @@ mode_parse_history(struct ParseState *state, chmode_t *flag_p)
       state->chptr->mode.hist_lines = 0;
       state->chptr->mode.hist_hours = 0;
       history_clear(state->chptr);
+    }
+  }
+}
+
+/** Parse a forward channel (+f).
+ * Removal takes no parameter.
+ *
+ * @param state		Parsing state object.
+ * @param flag_p	Flag table entry for +f.
+ */
+static void
+mode_parse_forward(struct ParseState *state, chmode_t *flag_p)
+{
+  char *t_str = state->chptr->mode.forward;
+
+  if (state->dir == MODE_ADD) {
+    if (MyUser(state->sptr) && state->max_args <= 0) /* too many args? */
+      return;
+
+    if (state->parc <= 0) { /* warn if not enough args */
+      if (MyUser(state->sptr))
+	need_more_params(state->sptr, "MODE +f");
+      return;
+    }
+
+    t_str = state->parv[state->args_used++];
+    state->parc--;
+    state->max_args--;
+
+    /* must be a valid channel name, and may not point to the channel itself */
+    if (!IsChannelName(t_str) || !strIsIrcCh(t_str)
+	|| strlen(t_str) > IRCD_MIN(CHANNELLEN, feature_int(FEAT_CHANNELLEN))
+	|| !ircd_strcmp(t_str, state->chptr->chname)) {
+      if (MyUser(state->sptr))
+	send_reply(state->sptr, ERR_NOSUCHCHANNEL, t_str);
+      return;
+    }
+
+    if (!(state->flags & MODE_PARSE_WIPEOUT) &&
+	(state->chptr->mode.mode & MODE_FORWARD) &&
+	!ircd_strcmp(state->chptr->mode.forward, t_str))
+      return; /* no change */
+  }
+
+  /* If they're not an oper, they can't change modes */
+  if (state->flags & (MODE_PARSE_NOTOPER | MODE_PARSE_NOTMEMBER)) {
+    send_notoper(state);
+    return;
+  }
+
+  /* Can't remove a forward that's not there */
+  if (state->dir == MODE_DEL && !(state->chptr->mode.mode & MODE_FORWARD))
+    return;
+
+  /* Skip if this is a burst and the existing forward sorts first */
+  if ((state->flags & MODE_PARSE_BURST) && state->dir == MODE_ADD &&
+      !(state->flags & MODE_PARSE_WIPEOUT) &&
+      (state->chptr->mode.mode & MODE_FORWARD) &&
+      ircd_strcmp(state->chptr->mode.forward, t_str) <= 0)
+    return;
+
+  if (state->done & DONE_FORWARD) /* allow it to be set only once */
+    return;
+  state->done |= DONE_FORWARD;
+
+  if (!state->mbuf)
+    return;
+
+  if (state->flags & MODE_PARSE_BOUNCE) {
+    if (state->chptr->mode.mode & MODE_FORWARD) /* reset old forward */
+      modebuf_mode_string(state->mbuf, MODE_DEL | flag_p[0],
+			  state->chptr->mode.forward, 0);
+    else /* remove new bogus forward */
+      modebuf_mode_string(state->mbuf, MODE_ADD | flag_p[0], t_str, 0);
+  } else
+    modebuf_mode_string(state->mbuf, state->dir | flag_p[0], t_str, 0);
+
+  if (state->flags & MODE_PARSE_SET) {
+    if (state->dir & MODE_ADD) {
+      state->chptr->mode.mode |= flag_p[0];
+      ircd_strncpy(state->chptr->mode.forward, t_str, CHANNELLEN);
+    } else {
+      state->chptr->mode.mode &= ~flag_p[0];
+      state->chptr->mode.forward[0] = '\0';
     }
   }
 }
@@ -3712,6 +3856,7 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
     MODE_LIMIT,		'l',
     MODE_JOINFLOOD,	'j',
     MODE_HISTORY,	'H',
+    MODE_FORWARD,	'f',
     MODE_REGONLY,	'r',
     MODE_DELJOINS,      'D',
     MODE_NOCOLOR,       'c',
@@ -3794,6 +3939,10 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
 
       case 'H': /* deal with channel history */
 	mode_parse_history(&state, flag_p);
+	break;
+
+      case 'f': /* deal with join forwarding */
+	mode_parse_forward(&state, flag_p);
 	break;
 
       case 'k': /* deal with keys */
@@ -3924,6 +4073,12 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
     if ((state.chptr->mode.mode & MODE_HISTORY) &&
 	!(state.done & DONE_HISTORY))
       modebuf_mode_uint(state.mbuf, MODE_DEL | MODE_HISTORY, 0);
+    if ((state.chptr->mode.mode & MODE_FORWARD) &&
+	!(state.done & DONE_FORWARD)) {
+      modebuf_mode_string(state.mbuf, MODE_DEL | MODE_FORWARD, 0, 0);
+      state.chptr->mode.mode &= ~MODE_FORWARD;
+      state.chptr->mode.forward[0] = '\0';
+    }
     if (*state.chptr->mode.key && !(state.done & DONE_KEY_DEL))
       modebuf_mode_string(state.mbuf, MODE_DEL | MODE_KEY,
 			  state.chptr->mode.key, 0);
