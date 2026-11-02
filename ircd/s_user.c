@@ -363,6 +363,16 @@ int register_user(struct Client *cptr, struct Client *sptr)
   {
     assert(cptr == sptr);
 
+    if (feature_bool(FEAT_SETHOST_AUTO)) {
+      if (conf_check_slines(sptr)) {
+        send_reply(sptr, RPL_USINGSLINE);
+        SetSetHost(sptr);
+      }
+    }
+
+    /* Cloak first so G-lines on the visible host match too. */
+    cloak_client(sptr);
+
     /* IAuth or WEBIRC may have changed username/host after the early
      * check in check_auth_finished(), so check K-/G-lines against the
      * final identity as well. */
@@ -375,15 +385,6 @@ int register_user(struct Client *cptr, struct Client *sptr)
 
     if (feature_bool(FEAT_AUTOINVISIBLE))
       SetInvisible(sptr);
-
-    if (feature_bool(FEAT_SETHOST_AUTO)) {
-      if (conf_check_slines(sptr)) {
-        send_reply(sptr, RPL_USINGSLINE);
-        SetSetHost(sptr);
-      }
-    }
-
-    cloak_client(sptr);
 
     /*
      * Set user's initial modes

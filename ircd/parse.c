@@ -1062,7 +1062,13 @@ parse_client(struct Client *cptr, char *buffer, char *bufend)
   i = bufend - ((s) ? s : ch);
   mptr->bytes += i;
   /* Coarser tag divisor: one max client-tag line must not stall follow-ups. */
-  if ((mptr->flags & MFLG_SLOW) || !IsAnOper(cptr))
+  /* Capability/SASL negotiation before registration must not be fake-lagged:
+   * a SCRAM exchange would otherwise stall for seconds. recvQ limits still apply. */
+  if (!IsRegistered(cptr) &&
+      (!strcmp(mptr->cmd, MSG_CAP) || !strcmp(mptr->cmd, MSG_AUTHENTICATE) ||
+       !strcmp(mptr->cmd, MSG_PONG)))
+    ;
+  else if ((mptr->flags & MFLG_SLOW) || !IsAnOper(cptr))
     cli_since(cptr) += IsBot(cptr)
       ? (1 + i / 240 + tag_len / 1024)
       : (2 + i / 120 + tag_len / 512);

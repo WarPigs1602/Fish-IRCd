@@ -52,6 +52,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+static int gline_host_match(struct Gline *gline, struct User *user);
+
 #define CHECK_APPROVED	   0	/**< Mask is acceptable */
 #define CHECK_OVERRIDABLE  1	/**< Mask is acceptable, but not by default */
 #define CHECK_REJECTED	   2	/**< Mask is totally unacceptable */
@@ -364,7 +366,7 @@ do_gline(struct Client *cptr, struct Client *sptr, struct Gline *gline)
             continue;
         }
         else {
-          if (match(gline->gl_host, cli_user(acptr)->realhost) != 0)
+          if (!gline_host_match(gline, cli_user(acptr)))
             continue;
         }
       }
@@ -1229,6 +1231,18 @@ gline_find(char *userhost, unsigned int flags)
   return gline;
 }
 
+/** Check a host G-line against a user's real and visible (cloaked) host.
+ * @param[in] gline G-line with a host mask.
+ * @param[in] user User to compare against.
+ * @return Non-zero if the mask matches either host.
+ */
+static int
+gline_host_match(struct Gline *gline, struct User *user)
+{
+  return match(gline->gl_host, user->realhost) == 0 ||
+         (*user->host && match(gline->gl_host, user->host) == 0);
+}
+
 /** Find a matching G-line for a user.
  * @param[in] cptr Client to compare against.
  * @param[in] flags Bitwise combination of GLINE_GLOBAL and/or
@@ -1285,7 +1299,7 @@ gline_lookup(struct Client *cptr, unsigned int flags)
           continue;
       }
       else {
-        if (match(gline->gl_host, (cli_user(cptr))->realhost) != 0)
+        if (!gline_host_match(gline, cli_user(cptr)))
           continue;
       }
     }
@@ -1380,7 +1394,7 @@ IsNickGlined(struct Client *cptr, char *nick)
         continue;
     }
     else {
-      if (match(gline->gl_host, (cli_user(cptr))->realhost) != 0)
+      if (!gline_host_match(gline, cli_user(cptr)))
         continue;
     }
 
