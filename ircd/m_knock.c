@@ -50,7 +50,8 @@ knock_notify(struct Client *sptr, struct Channel *chptr, const char *comment)
   struct Membership *member;
 
   for (member = chptr->members; member; member = member->next_member) {
-    if (!MyConnect(member->user) || IsZombie(member) || !IsChanOp(member))
+    if (!MyConnect(member->user) || IsZombie(member) ||
+        !IsChanOperator(member))
       continue;
 
     sendcmdto_one(&me, CMD_NOTICE, member->user,

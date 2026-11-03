@@ -91,13 +91,13 @@ struct HistEntry;
 
 /** Optional prefix flags beyond +o and +v */
 #define CHFL_EXT_MASK        (CHFL_HALFOP | CHFL_ADMIN | CHFL_OWNER | CHFL_SERVICE)
-/** Prefix flags that imply +o */
+/** Extended prefixes that grant channel-operator privileges */
 #define CHFL_EXT_OP_MASK     (CHFL_ADMIN | CHFL_OWNER | CHFL_SERVICE)
 #define CHFL_PREFIX_MASK     (CHFL_CHANOP | CHFL_VOICE | CHFL_EXT_MASK)
 
 #define CHFL_OVERLAP         (CHFL_CHANOP | CHFL_VOICE)
 #define CHFL_BANVALIDMASK    (CHFL_BANVALID | CHFL_BANNED)
-#define CHFL_VOICED_OR_OPPED (CHFL_CHANOP | CHFL_VOICE)
+#define CHFL_VOICED_OR_OPPED (CHFL_CHANOP | CHFL_VOICE | CHFL_EXT_OP_MASK)
 
 /* Channel Visibility macros */
 
@@ -234,6 +234,7 @@ struct Membership {
 #define IsBanned(x)         ((x)->status & CHFL_BANNED)
 #define IsBanValid(x)       ((x)->status & CHFL_BANVALID)
 #define IsChanOp(x)         ((x)->status & CHFL_CHANOP)
+#define IsChanOperator(x)   ((x)->status & (CHFL_CHANOP | CHFL_EXT_OP_MASK))
 #define OpLevel(x)          ((x)->oplevel)
 #define HasVoice(x)         ((x)->status & CHFL_VOICE)
 #define IsServOpOk(x)       ((x)->status & CHFL_SERVOPOK)
@@ -472,6 +473,8 @@ extern const char *chan_prefix_chars(void);
 extern const char *chan_isupport_prefix(void);
 extern int member_rank(const struct Membership *member);
 extern int chan_prefix_string(const struct Membership *member, char *buf);
+extern int chan_member_modes(const struct Membership *member, char *buf,
+                             size_t buf_len);
 extern unsigned int mode_to_chfl(chmode_t mode);
 
 extern void modebuf_mode(struct ModeBuf *mbuf, chmode_t mode);

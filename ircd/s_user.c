@@ -1023,7 +1023,9 @@ hide_hostmask(struct Client *cptr, unsigned int flag)
 {
   struct Membership *chan;
   char new_host[HOSTLEN + 1];
+  char modes[8];
   const char *new_user;
+  int i;
 
   switch (flag) {
   case FLAG_HIDDENHOST:
@@ -1083,13 +1085,10 @@ hide_hostmask(struct Client *cptr, unsigned int flag)
           sendcmdto_capflag_channel_butserv_butone(cptr, CMD_AWAY, chan->channel,
             NULL, 0, CAP_AWAYNOTIFY, CAP_CHGHOST, ":%s", cli_user(cptr)->away);
       }
-      if (IsChanOp(chan) && HasVoice(chan))
-        sendcmdto_capflag_channel_butserv_butone(&his, CMD_MODE, chan->channel, cptr, 0,
-                                         0, CAP_CHGHOST, "%H +ov %C %C", chan->channel, cptr,
-                                         cptr);
-      else if (IsChanOp(chan) || HasVoice(chan))
-        sendcmdto_capflag_channel_butserv_butone(&his, CMD_MODE, chan->channel, cptr, 0,
-          0, CAP_CHGHOST, "%H +%c %C", chan->channel, IsChanOp(chan) ? 'o' : 'v', cptr);
+      chan_member_modes(chan, modes, sizeof(modes));
+      for (i = 0; modes[i]; i++)
+        sendcmdto_capflag_channel_butserv_butone(&his, CMD_MODE, chan->channel,
+          cptr, 0, 0, CAP_CHGHOST, "%H +%c %C", chan->channel, modes[i], cptr);
     }
     return 0;
   }
@@ -1218,8 +1217,10 @@ int set_hostmask(struct Client *cptr, char *hostmask, char *password)
 {
   int restore = 0;
   int freeform = 0;
+  int i;
   char *host, *new_vhost, *vhost_pass;
   char hiddenhost[USERLEN + HOSTLEN + 2];
+  char modes[8];
   struct Membership *chan;
 
   Debug((DEBUG_INFO, "set_hostmask() %C, %s, %s", cptr, hostmask, password));
@@ -1367,21 +1368,16 @@ int set_hostmask(struct Client *cptr, char *hostmask, char *password)
     /* If this channel has delayed joins and the user has no modes, just set
      * the delayed join flag rather than showing the join, even if the user
      * was visible before */
-    if (!IsChanOp(chan) && !HasVoice(chan)
-        && (chan->channel->mode.mode & MODE_DELJOINS)) {
+    if (!IsVoicedOrOpped(chan) && (chan->channel->mode.mode & MODE_DELJOINS)) {
       SetDelayedJoin(chan);
     } else if (!IsDelayedJoin(chan)) {
       sendjointo_channel_butserv(cptr, chan->channel, 0, CAP_CHGHOST);
     }
 
-    if (IsChanOp(chan) && HasVoice(chan)) {
-      sendcmdto_capflag_channel_butserv_butone(&his, CMD_MODE, chan->channel, cptr, 0,
-                                               0, CAP_CHGHOST, "%H +ov %C %C", chan->channel, cptr,
-                                               cptr);
-    } else if (IsChanOp(chan) || HasVoice(chan)) {
-      sendcmdto_capflag_channel_butserv_butone(&his, CMD_MODE, chan->channel, cptr, 0,
-        0, CAP_CHGHOST, "%H +%c %C", chan->channel, IsChanOp(chan) ? 'o' : 'v', cptr);
-    }
+    chan_member_modes(chan, modes, sizeof(modes));
+    for (i = 0; modes[i]; i++)
+      sendcmdto_capflag_channel_butserv_butone(&his, CMD_MODE, chan->channel,
+        cptr, 0, 0, CAP_CHGHOST, "%H +%c %C", chan->channel, modes[i], cptr);
   }
   sendcmdto_capflag_common_channels_butone(cptr, CMD_CHGHOST, NULL, CAP_CHGHOST, 0,
                                             "%s %s", cli_user(cptr)->username, cli_user(cptr)->host);

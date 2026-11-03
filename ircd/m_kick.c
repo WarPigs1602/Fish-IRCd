@@ -124,7 +124,7 @@ int m_kick(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
     return send_reply(sptr, ERR_NOSUCHCHANNEL, name);
 
   if (!(member2 = find_member_link(chptr, sptr)) || IsZombie(member2)
-      || !IsChanOp(member2))
+      || !IsChanOperator(member2))
     return send_reply(sptr, ERR_CHANOPRIVSNEEDED, name);
 
   if (!(who = find_chasing(sptr, parv[2], 0)))
@@ -239,7 +239,8 @@ int ms_kick(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
    * operator, bounce the kick
    */
   if (!IsServer(sptr) && member && cli_from(who) != cptr &&
-      (!(sptr_link = find_member_link(chptr, sptr)) || !IsChanOp(sptr_link))) {
+      (!(sptr_link = find_member_link(chptr, sptr)) ||
+       !IsChanOperator(sptr_link))) {
     sendto_opmask_butone(0, SNO_HACK2, "HACK: %C KICK %H %C %s", sptr, chptr,
 			 who, comment);
 

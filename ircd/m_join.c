@@ -260,7 +260,10 @@ int m_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
         channel_set_auto_modes(chptr, modes, sizeof(modes));
       }
 
-      joinbuf_join(&create, chptr, CHFL_CHANOP | CHFL_CHANNEL_MANAGER | delay_flag);
+      joinbuf_join(&create, chptr,
+                   (IsChannelService(sptr) && feature_bool(FEAT_CHMODE_SERVICE)
+                    ? CHFL_SERVICE : CHFL_CHANOP)
+                   | CHFL_CHANNEL_MANAGER | delay_flag);
     } else if (find_member_link(chptr, sptr)) {
       continue; /* already on channel */
     } else if ((delay_flag = check_target_join(sptr, chptr)) == 1) {
@@ -368,8 +371,13 @@ int m_join(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
         continue;
       }
 
-      if (IsChannelService(sptr))
-        flags |= CHFL_CHANOP;
+      if (IsChannelService(sptr)) {
+        if (feature_bool(FEAT_CHMODE_SERVICE)) {
+          flags &= ~(CHFL_CHANOP | CHFL_DEOPPED);
+          flags |= CHFL_SERVICE;
+        } else
+          flags |= CHFL_CHANOP;
+      }
 
       joinbuf_join(&join, chptr, flags | delay_flag);
       channel_joinflood_note(chptr);

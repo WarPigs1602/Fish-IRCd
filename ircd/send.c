@@ -919,7 +919,7 @@ void sendcmdto_capflag_channel_butserv_butone(struct Client *from, const char *c
         || member->user == one
         || IsZombie(member)
         || (skip & SKIP_DEAF && IsDeaf(member->user))
-        || (skip & SKIP_NONOPS && !IsChanOp(member))
+        || (skip & SKIP_NONOPS && !IsChanOperator(member))
         || (skip & SKIP_NONVOICES && !IsVoicedOrOpped(member))
         || (require && !CapHas(cli_active(member->user), require))
         || (forbid && CapHas(cli_active(member->user), forbid)))
@@ -998,7 +998,7 @@ void sendcmdto_channel_butserv_butone(struct Client *from, const char *cmd,
         || member->user == one 
         || IsZombie(member)
         || (skip & SKIP_DEAF && IsDeaf(member->user))
-        || (skip & SKIP_NONOPS && !IsChanOp(member))
+        || (skip & SKIP_NONOPS && !IsChanOperator(member))
         || (skip & SKIP_NONVOICES && !IsVoicedOrOpped(member)))
         continue;
       send_buffer(member->user, from, mb, 0, NULL, &tcache);
@@ -1042,7 +1042,7 @@ void sendcmdto_channel_servers_butone(struct Client *from, const char *cmd,
         || IsZombie(member)
         || cli_fd(cli_from(member->user)) < 0
         || cli_sentalong(member->user) == sentalong_marker
-        || (skip & SKIP_NONOPS && !IsChanOp(member))
+        || (skip & SKIP_NONOPS && !IsChanOperator(member))
         || (skip & SKIP_NONVOICES && !IsVoicedOrOpped(member)))
       continue;
     cli_sentalong(member->user) = sentalong_marker;
@@ -1094,7 +1094,7 @@ void sendcmdto_channel_butone(struct Client *from, const char *cmd,
     /* skip one, zombies, and deaf users... */
     if (IsZombie(member) ||
         (skip & SKIP_DEAF && IsDeaf(member->user)) ||
-        (skip & SKIP_NONOPS && !IsChanOp(member)) ||
+        (skip & SKIP_NONOPS && !IsChanOperator(member)) ||
         (skip & SKIP_NONVOICES && !IsVoicedOrOpped(member)) ||
         (skip & SKIP_BURST && IsBurstOrBurstAck(cli_from(member->user))) ||
         cli_fd(cli_from(member->user)) < 0 ||

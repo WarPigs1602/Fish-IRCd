@@ -178,8 +178,10 @@ int ms_sethost(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
 {
   struct Client *target;
   char hostmask[USERLEN + HOSTLEN + 2];
+  char modes[8];
   struct Membership *chan;
   struct Flags setflags;
+  int i;
 
   if (parc < 4)
     return need_more_params(sptr, "SETHOST");
@@ -234,20 +236,16 @@ int ms_sethost(struct Client* cptr, struct Client* sptr, int parc, char* parv[])
     /* If this channel has delayed joins and the user has no modes, just set
      * the delayed join flag rather than showing the join, even if the user
      * was visible before */
-    if (!IsChanOp(chan) && !HasVoice(chan)
-        && (chan->channel->mode.mode & MODE_DELJOINS)) {
+    if (!IsVoicedOrOpped(chan) && (chan->channel->mode.mode & MODE_DELJOINS)) {
       SetDelayedJoin(chan);
     } else {
       sendcmdto_channel_butserv_butone(target, CMD_JOIN, chan->channel, target, 0,
         "%H", chan->channel);
     }
-    if (IsChanOp(chan) && HasVoice(chan)) {
+    chan_member_modes(chan, modes, sizeof(modes));
+    for (i = 0; modes[i]; i++)
       sendcmdto_channel_butserv_butone(&his, CMD_MODE, chan->channel, target, 0,
-        "%H +ov %C %C", chan->channel, target, target);
-    } else if (IsChanOp(chan) || HasVoice(chan)) {
-      sendcmdto_channel_butserv_butone(&his, CMD_MODE, chan->channel, target, 0,
-        "%H +%c %C", chan->channel, IsChanOp(chan) ? 'o' : 'v', target);
-    }
+        "%H +%c %C", chan->channel, modes[i], target);
   }
 
   send_umode_out(target, target, &setflags, 0);

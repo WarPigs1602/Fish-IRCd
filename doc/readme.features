@@ -1073,21 +1073,24 @@ CHMODE_SERVICE
 
 Enables the optional channel user mode +y (prefix '!').  It is set
 automatically on channel services (+k users) when they join a channel and
-can only be set or removed by services and servers.  +y implies +o.
+can only be set or removed by services and servers.  +y is independent of
++o, but grants channel-operator privileges.
 
 CHMODE_OWNER
  * Type: boolean
  * Default: FALSE
 
 Enables the optional channel user mode +q (prefix '~', channel owner).  It
-can be set or removed by owners and services.  +q implies +o.
+can be set or removed by owners and services.  +q is independent of +o, but
+grants channel-operator privileges.
 
 CHMODE_ADMIN
  * Type: boolean
  * Default: FALSE
 
 Enables the optional channel user mode +a (prefix '&', channel admin).  It
-can be set or removed by admins, owners and services.  +a implies +o.
+can be set or removed by admins, owners and services.  +a is independent of
++o, but grants channel-operator privileges.
 
 CHMODE_HALFOP
  * Type: boolean

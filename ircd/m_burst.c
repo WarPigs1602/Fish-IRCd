@@ -544,7 +544,11 @@ int ms_burst(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
 	  member_mode = current_mode;
 	  member_oplevel = oplevel;
 	  if (IsChannelService(acptr)) {
-	    member_mode = (member_mode & ~CHFL_DEOPPED) | CHFL_CHANOP;
+	    if (feature_bool(FEAT_CHMODE_SERVICE))
+	      member_mode = (member_mode & ~(CHFL_DEOPPED | CHFL_CHANOP))
+	          | CHFL_SERVICE;
+	    else
+	      member_mode = (member_mode & ~CHFL_DEOPPED) | CHFL_CHANOP;
 	    if (!(current_mode & CHFL_CHANOP))
 	      member_oplevel = MAXOPLEVEL;
 	  }
@@ -647,10 +651,15 @@ int ms_burst(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
 	    modebuf_mode_client(mbuf, MODE_ADD | MODE_HALFOP, member->user, OpLevel(member));
 	}
       } else if (parse_flags & MODE_PARSE_WIPEOUT) { /* wipeout old ops */
-	if (IsChannelService(member->user) && !(member->status & CHFL_CHANOP))
-	  modebuf_mode_client(mbuf, MODE_ADD | CHFL_CHANOP, member->user, MAXOPLEVEL);
+	if (IsChannelService(member->user)) {
+	  if (feature_bool(FEAT_CHMODE_SERVICE)) {
+	    if (!(member->status & CHFL_SERVICE))
+	      modebuf_mode_client(mbuf, MODE_ADD | MODE_CHSERV, member->user, MAXOPLEVEL);
+	  } else if (!(member->status & CHFL_CHANOP))
+	    modebuf_mode_client(mbuf, MODE_ADD | CHFL_CHANOP, member->user, MAXOPLEVEL);
+	}
 	if ((member->status & CHFL_CHANOP)
-            && !IsChannelService(member->user))
+            && (!IsChannelService(member->user) || feature_bool(FEAT_CHMODE_SERVICE)))
 	  modebuf_mode_client(mbuf, MODE_DEL | CHFL_CHANOP, member->user, OpLevel(member));
 	if (member->status & CHFL_VOICE)
 	  modebuf_mode_client(mbuf, MODE_DEL | CHFL_VOICE, member->user, OpLevel(member));
@@ -662,10 +671,15 @@ int ms_burst(struct Client *cptr, struct Client *sptr, int parc, char *parv[])
 	  modebuf_mode_client(mbuf, MODE_DEL | MODE_HALFOP, member->user, OpLevel(member));
 	if (IsChanService(member) && !IsChannelService(member->user))
 	  modebuf_mode_client(mbuf, MODE_DEL | MODE_CHSERV, member->user, OpLevel(member));
-	if (IsChannelService(member->user))
+	if (IsChannelService(member->user) && !feature_bool(FEAT_CHMODE_SERVICE))
 	  member->status = (member->status & ~(CHFL_CHANNEL_MANAGER | CHFL_VOICE
                                                | (CHFL_EXT_MASK & ~CHFL_SERVICE)))
                            | CHFL_CHANOP;
+	else if (IsChannelService(member->user))
+	  member->status = (member->status & ~(CHFL_CHANNEL_MANAGER | CHFL_CHANOP
+                                               | CHFL_VOICE
+                                               | (CHFL_EXT_MASK & ~CHFL_SERVICE)))
+                           | CHFL_SERVICE;
 	else
 	  member->status = (member->status
                             & ~(CHFL_CHANNEL_MANAGER | CHFL_CHANOP | CHFL_VOICE

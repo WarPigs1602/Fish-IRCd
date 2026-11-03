@@ -570,9 +570,12 @@ void add_user_to_channel(struct Channel* chptr, struct Client* who,
     member->channel      = chptr;
     member->status       = flags;
     if (IsChannelService(who)) {
-      member->status |= CHFL_CHANOP;
       if (feature_bool(FEAT_CHMODE_SERVICE))
-        member->status |= CHFL_SERVICE;
+        member->status = (member->status & ~(CHFL_CHANOP | CHFL_DEOPPED))
+            | CHFL_SERVICE;
+      else
+        member->status = (member->status & ~(CHFL_SERVICE | CHFL_DEOPPED))
+            | CHFL_CHANOP;
     }
     SetOpLevel(member, oplevel);
 
@@ -811,8 +814,25 @@ int chan_prefix_string(const struct Membership *member, char *buf)
   size_t i;
   int n = 0;
   for (i = 0; i < PREFIX_DEFS; i++)
-    if (member->status & prefix_defs[i].chfl)
+    if (prefix_enabled(i) && (member->status & prefix_defs[i].chfl))
       buf[n++] = prefix_defs[i].prefix;
+  return n;
+}
+
+/** Writes all member mode letters to a NUL-terminated buffer. */
+int chan_member_modes(const struct Membership *member, char *buf,
+                      size_t buf_len)
+{
+  size_t i;
+  int n = 0;
+
+  if (!member || !buf || !buf_len)
+    return 0;
+
+  for (i = 0; i < PREFIX_DEFS && (size_t)n + 1 < buf_len; i++)
+    if (prefix_enabled(i) && (member->status & prefix_defs[i].chfl))
+      buf[n++] = prefix_defs[i].letter;
+  buf[n] = '\0';
   return n;
 }
 
@@ -839,7 +859,7 @@ int is_chan_op(struct Client *cptr, struct Channel *chptr)
   struct Membership* member;
   assert(chptr);
   if ((member = find_member_link(chptr, cptr)))
-    return (!IsZombie(member) && IsChanOp(member));
+    return (!IsZombie(member) && IsChanOperator(member));
 
   return 0;
 }
@@ -1149,7 +1169,7 @@ void channel_modes(struct Client *cptr, char *mbuf, char *pbuf, int buflen,
     *mbuf++ = 'U';
     if (previous_parameter)
       strcat(pbuf, " ");
-    if (IsServer(cptr) || (member && IsChanOp(member) && OpLevel(member) == 0)) {
+    if (IsServer(cptr) || (member && IsChanOperator(member) && OpLevel(member) == 0)) {
       strcat(pbuf, chptr->mode.upass);
     } else
       strcat(pbuf, "*");
@@ -1325,14 +1345,19 @@ void send_channel_modes(struct Client *cptr, struct Channel *chptr)
 
 	    if (HasVoice(member))
 	      tbuf[loc++] = 'v';
-	    if (IsHalfOp(member))
+	    if (IsHalfOp(member) && feature_bool(FEAT_CHMODE_HALFOP))
 	      tbuf[loc++] = 'h';
-	    if (IsChanAdmin(member))
+	    if (IsChanAdmin(member) && feature_bool(FEAT_CHMODE_ADMIN))
 	      tbuf[loc++] = 'a';
-	    if (IsChanOwner(member))
+	    if (IsChanOwner(member) && feature_bool(FEAT_CHMODE_OWNER))
 	      tbuf[loc++] = 'q';
 	    if (IsChanService(member))
-	      tbuf[loc++] = 'y';
+	    {
+	      if (feature_bool(FEAT_CHMODE_SERVICE))
+		tbuf[loc++] = 'y';
+	      else if (!IsChanOp(member))
+		tbuf[loc++] = 'o';
+	    }
 	    if (IsChanOp(member))
 	    {
               /* append the absolute value of the oplevel */
@@ -3954,28 +3979,11 @@ mode_process_clients(struct ParseState *state)
 	member->status |= chfl;
 	if (state->cli_change[i].flag & MODE_CHANOP)
 	  ClearDeopped(member);
-	/* +y, +q and +a imply +o */
-	if ((chfl & CHFL_EXT_OP_MASK) && !IsChanOp(member)) {
-	  member->status |= CHFL_CHANOP;
-	  ClearDeopped(member);
+	/* Extended operator prefixes grant privileges without setting +o. */
+	if ((chfl & CHFL_EXT_OP_MASK) && !IsChanOp(member))
 	  SetOpLevel(member, MAXOPLEVEL);
-	  modebuf_mode_client(state->mbuf, MODE_ADD | MODE_CHANOP,
-			      state->cli_change[i].client, MAXOPLEVEL);
-	}
       } else {
 	member->status &= ~chfl;
-	/* removing +o also removes the modes that imply it */
-	if (chfl & CHFL_CHANOP) {
-	  static const chmode_t implied[] = { MODE_CHSERV, MODE_OWNER, MODE_ADMIN };
-	  int k;
-	  for (k = 0; k < 3; k++)
-	    if (member->status & mode_to_chfl(implied[k])) {
-	      member->status &= ~mode_to_chfl(implied[k]);
-	      modebuf_mode_client(state->mbuf, MODE_DEL | implied[k],
-				  state->cli_change[i].client,
-				  state->cli_change[i].oplevel);
-	    }
-	}
       }
     }
 
@@ -4123,7 +4131,7 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
   }
 
   /* Half-ops (without full op) may only change +v. */
-  halfop_limited = member && !IsChanOp(member) && IsHalfOp(member)
+  halfop_limited = member && !IsChanOperator(member) && IsHalfOp(member)
       && !(flags & MODE_PARSE_FORCE);
 
   modestr = state.parv[state.args_used++];
@@ -4141,13 +4149,19 @@ mode_parse(struct ModeBuf *mbuf, struct Client *cptr, struct Client *sptr,
 	continue;
       }
 
-      /* Optional member modes are disabled unless configured. */
-      if (MyUser(state.sptr) && !(state.flags & MODE_PARSE_FORCE)
+      /* Do not accept new optional prefixes while their feature is disabled. */
+      if (state.dir == MODE_ADD
           && ((*modestr == 'y' && !feature_bool(FEAT_CHMODE_SERVICE))
               || (*modestr == 'q' && !feature_bool(FEAT_CHMODE_OWNER))
               || (*modestr == 'a' && !feature_bool(FEAT_CHMODE_ADMIN))
               || (*modestr == 'h' && !feature_bool(FEAT_CHMODE_HALFOP)))) {
-        send_reply(state.sptr, ERR_UNKNOWNMODE, *modestr);
+        if (MyUser(state.sptr))
+          send_reply(state.sptr, ERR_UNKNOWNMODE, *modestr);
+        if (state.parc > 0 && (!MyUser(state.sptr) || state.max_args > 0)) {
+          state.args_used++;
+          state.parc--;
+          state.max_args--;
+        }
         continue;
       }
 
@@ -4474,8 +4488,13 @@ joinbuf_join(struct JoinBuf *jbuf, struct Channel *chan, unsigned int flags)
         : (flags & CHFL_CHANNEL_MANAGER) ? 0
         : 1;
 
-    if (IsChannelService(jbuf->jb_source))
-      flags |= CHFL_CHANOP;
+    if (IsChannelService(jbuf->jb_source)) {
+      if (feature_bool(FEAT_CHMODE_SERVICE)) {
+        flags &= ~(CHFL_CHANOP | CHFL_DEOPPED);
+        flags |= CHFL_SERVICE;
+      } else
+        flags |= CHFL_CHANOP;
+    }
 
     /* Add user to channel */
     if ((chan->mode.mode & MODE_DELJOINS) && !(flags & CHFL_VOICED_OR_OPPED))
@@ -4495,19 +4514,19 @@ joinbuf_join(struct JoinBuf *jbuf, struct Channel *chan, unsigned int flags)
         sendcmdto_capflag_common_channels_butone(jbuf->jb_source, CMD_AWAY, jbuf->jb_connect,
           CAP_AWAYNOTIFY, 0, ":%s", cli_user(jbuf->jb_source)->away);
 
-      /* send an op, too, if needed */
-      if (flags & CHFL_CHANOP
+      /* Give channel services +y instead of +o when the mode is enabled. */
+      if (IsChannelService(jbuf->jb_source)
+          && feature_bool(FEAT_CHMODE_SERVICE)) {
+        sendcmdto_channel_butserv_butone(&his, CMD_MODE, chan, NULL, 0,
+                                         "%H +y %C", chan,
+                                         jbuf->jb_source);
+      } else if (flags & CHFL_CHANOP
           && (oplevel < MAXOPLEVEL || !MyUser(jbuf->jb_source)
               || IsChannelService(jbuf->jb_source))) {
         struct Client *mode_src = (IsChannelService(jbuf->jb_source) || chan->mode.apass[0]) ?
                                   &his : jbuf->jb_source;
-        if (IsChannelService(jbuf->jb_source) && feature_bool(FEAT_CHMODE_SERVICE))
-          sendcmdto_channel_butserv_butone(mode_src, CMD_MODE, chan, NULL, 0,
-                                           "%H +oy %C %C", chan,
-                                           jbuf->jb_source, jbuf->jb_source);
-        else
-          sendcmdto_channel_butserv_butone(mode_src, CMD_MODE, chan, NULL, 0,
-                                           "%H +o %C", chan, jbuf->jb_source);
+        sendcmdto_channel_butserv_butone(mode_src, CMD_MODE, chan, NULL, 0,
+                                         "%H +o %C", chan, jbuf->jb_source);
       }
     } else if (MyUser(jbuf->jb_source))
       sendjointo_one(jbuf->jb_source, chan, jbuf->jb_source);

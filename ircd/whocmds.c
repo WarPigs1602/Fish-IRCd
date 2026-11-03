@@ -248,7 +248,7 @@ void do_who(struct Client* sptr, struct Client* acptr, struct Channel* repchan,
 
   if (fields & WHO_FIELD_OPL)
   {
-      if (!chan || !IsChanOp(chan))
+      if (!chan || !IsChanOperator(chan))
       {
         strcpy(p1, " n/a");
         p1 += 4;
